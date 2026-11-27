@@ -7,10 +7,34 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = ["runtime"]
+# The engine, queue, state and IPC server. The native host builds without it to stay small.
+runtime = [
+    "dep:chrono",
+    "dep:futures-util",
+    "dep:percent-encoding",
+    "dep:reqwest",
+    "dep:rusqlite",
+    "dep:tokio",
+    "dep:tokio-util",
+]
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["clock"], optional = true }
+futures-util = { version = "0.3", optional = true }
+percent-encoding = { version = "2", optional = true }
+reqwest = { version = "0.12", features = ["stream"], optional = true }
+rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "io-util", "net", "process"], optional = true }
+tokio-util = { version = "0.7", optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }
 
 [lints]
 workspace = true

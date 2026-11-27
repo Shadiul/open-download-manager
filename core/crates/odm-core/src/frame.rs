@@ -22,7 +22,7 @@ pub enum FrameError {
 }
 
 /// Reads one frame. Returns `Ok(None)` when the stream ends before a new frame starts.
-pub fn read_frame(reader: &mut impl Read, limit: usize) -> Result<Option<Vec<u8>>, FrameError> {
+pub fn read_frame<R: Read + ?Sized>(reader: &mut R, limit: usize) -> Result<Option<Vec<u8>>, FrameError> {
     let mut header = [0u8; 4];
     match reader.read_exact(&mut header) {
         Ok(()) => {}
@@ -39,7 +39,7 @@ pub fn read_frame(reader: &mut impl Read, limit: usize) -> Result<Option<Vec<u8>
 }
 
 /// Writes one frame and flushes, so the reader sees it at once.
-pub fn write_frame(writer: &mut impl Write, body: &[u8], limit: usize) -> Result<(), FrameError> {
+pub fn write_frame<W: Write + ?Sized>(writer: &mut W, body: &[u8], limit: usize) -> Result<(), FrameError> {
     if body.len() > limit {
         return Err(FrameError::TooLarge { size: body.len(), limit });
     }

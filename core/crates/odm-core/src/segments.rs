@@ -38,6 +38,24 @@ impl ByteRange {
     }
 }
 
+/// One segment's saved progress: it owns `[start, end)` and has fetched `[start, cursor)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SegmentRow {
+    pub start: u64,
+    pub cursor: u64,
+    pub end: u64,
+}
+
+impl SegmentRow {
+    pub fn fresh(range: ByteRange) -> Self {
+        Self { start: range.start, cursor: range.start, end: range.end }
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.cursor >= self.end
+    }
+}
+
 /// Splits a file of `total` bytes into contiguous ranges, one per connection, with no range
 /// shorter than `min_split` unless the whole file is.
 pub fn initial_plan(total: u64, connections: usize, min_split: u64) -> Vec<ByteRange> {

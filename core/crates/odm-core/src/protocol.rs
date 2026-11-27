@@ -22,6 +22,13 @@ pub enum Request {
     Ping,
     Download(DownloadRequest),
     Probe(ProbeRequest),
+    /// Several downloads at once, from "Download all links".
+    Batch(BatchRequest),
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct BatchRequest {
+    pub items: Vec<DownloadRequest>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

@@ -1,0 +1,20 @@
+[package]
+name = "odm-ffi"
+description = "C interface to the Open Download Manager core, for the Windows app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "odm"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+odm-core = { workspace = true, features = ["runtime"] }
+serde_json.workspace = true
+
+# This crate is the one place that needs unsafe code: raw pointers across the C boundary.
+[lints.clippy]
+all = { level = "warn", priority = -1 }
