@@ -22,7 +22,6 @@ public sealed partial class ViewSettings : ObservableObject
     [ObservableProperty] public partial bool ShowProgress { get; set; } = true;
     [ObservableProperty] public partial bool ShowSpeed { get; set; } = true;
     [ObservableProperty] public partial bool ShowTimeLeft { get; set; } = true;
-    [ObservableProperty] public partial bool ShowStatus { get; set; } = true;
     [ObservableProperty] public partial bool ShowAdded { get; set; } = true;
 
     public void Load(AppSettings store)
@@ -34,7 +33,6 @@ public sealed partial class ViewSettings : ObservableObject
         ShowProgress = store.ShowProgress;
         ShowSpeed = store.ShowSpeed;
         ShowTimeLeft = store.ShowTimeLeft;
-        ShowStatus = store.ShowStatus;
         ShowAdded = store.ShowAdded;
     }
 
@@ -56,7 +54,6 @@ public sealed partial class ViewSettings : ObservableObject
     partial void OnShowProgressChanged(bool value) => ColumnChanged(s => s.ShowProgress = value);
     partial void OnShowSpeedChanged(bool value) => ColumnChanged(s => s.ShowSpeed = value);
     partial void OnShowTimeLeftChanged(bool value) => ColumnChanged(s => s.ShowTimeLeft = value);
-    partial void OnShowStatusChanged(bool value) => ColumnChanged(s => s.ShowStatus = value);
     partial void OnShowAddedChanged(bool value) => ColumnChanged(s => s.ShowAdded = value);
 
     private void ColumnChanged(Action<AppSettings> save)
@@ -76,7 +73,7 @@ public sealed partial class ViewSettings : ObservableObject
 
     public double RowHeight => Density switch { "compact" => 32, "comfortable" => 52, _ => 42 };
     public double RowFontSize => Density switch { "compact" => 13, "comfortable" => 15, _ => 14 };
-    public double IconSize => Density switch { "compact" => 16, "comfortable" => 22, _ => 18 };
+    public double IconSize => Density switch { "compact" => 20, "comfortable" => 32, _ => 24 };
 
     // ----- columns that fit -----
 
@@ -95,14 +92,13 @@ public sealed partial class ViewSettings : ObservableObject
     public Visibility ProgressColumn => Vis(ShowProgress);
     public Visibility SpeedColumn => Vis(ShowSpeed && Fits(820));
     public Visibility TimeLeftColumn => Vis(ShowTimeLeft && Fits(960));
-    public Visibility StatusColumn => Vis(ShowStatus && Fits(720));
     public Visibility AddedColumn => Vis(ShowAdded && Fits(1080));
 
     private static Visibility Vis(bool show) => show ? Visibility.Visible : Visibility.Collapsed;
 
     private void RaiseColumns()
     {
-        foreach (var name in new[] { nameof(SizeColumn), nameof(ProgressColumn), nameof(SpeedColumn), nameof(TimeLeftColumn), nameof(StatusColumn), nameof(AddedColumn) })
+        foreach (var name in new[] { nameof(SizeColumn), nameof(ProgressColumn), nameof(SpeedColumn), nameof(TimeLeftColumn), nameof(AddedColumn) })
             OnPropertyChanged(name);
     }
 

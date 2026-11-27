@@ -19,7 +19,6 @@ public sealed class AppSettings
     public bool ShowProgress { get; set; } = true;
     public bool ShowSpeed { get; set; } = true;
     public bool ShowTimeLeft { get; set; } = true;
-    public bool ShowStatus { get; set; } = true;
     public bool ShowAdded { get; set; } = true;
     public string SortBy { get; set; } = "queue";
     public bool SortDescending { get; set; }

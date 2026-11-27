@@ -27,6 +27,22 @@ public sealed partial class DownloadItem : ObservableObject
     [ObservableProperty] public partial long Position { get; set; }
     [ObservableProperty] public partial long CreatedAt { get; set; }
     [ObservableProperty] public partial bool AwaitingConfirmation { get; set; }
+    /// <summary>The file's thumbnail or its type's icon, loaded in the background.</summary>
+    [ObservableProperty] public partial ImageSource? Icon { get; set; }
+
+    public bool NoIcon => Icon is null;
+    partial void OnIconChanged(ImageSource? value) => OnPropertyChanged(nameof(NoIcon));
+    private string _iconFor = "";
+
+    /// <summary>Loads the icon again when the file's name or finished path changes.</summary>
+    private async void LoadIcon()
+    {
+        var key = $"{FileName}|{FilePath}|{IsCompleted}";
+        if (key == _iconFor || string.IsNullOrEmpty(FileName)) return;
+        _iconFor = key;
+        var icon = await Services.FileIcons.ForAsync(FileName, IsCompleted ? FilePath : null);
+        if (_iconFor == key && icon is not null) Icon = icon;
+    }
 
     public DownloadItem(ulong id) => Id = id;
 
@@ -79,7 +95,49 @@ public sealed partial class DownloadItem : ObservableObject
         OnPropertyChanged(nameof(IsPaused));
         OnPropertyChanged(nameof(ProgressPercent));
         OnPropertyChanged(nameof(StatusBrush));
+        OnPropertyChanged(nameof(BarVisible));
+        OnPropertyChanged(nameof(StateVisible));
+        OnPropertyChanged(nameof(BarText));
+        OnPropertyChanged(nameof(StateText));
+        OnPropertyChanged(nameof(StateGlyph));
+        LoadIcon();
     }
+
+    // ----- the one progress-and-status column -----
+
+    /// <summary>A bar while the download runs or is paused partway; a word otherwise.</summary>
+    public bool BarVisible => State is "connecting" or "downloading" or "waitingToRetry"
+        || (State == "paused" && !AwaitingConfirmation && Downloaded > 0);
+
+    public bool StateVisible => !BarVisible;
+
+    public string BarText => State switch
+    {
+        "connecting" => "",
+        "waitingToRetry" => "Retrying",
+        "paused" => TotalSize is > 0 ? $"Paused {Progress:0}%" : "Paused",
+        _ => TotalSize is > 0 ? $"{Progress:0}%" : Format.Bytes(Downloaded),
+    };
+
+    public string StateText => State switch
+    {
+        "completed" => "Done",
+        "failed" => LinkExpired ? "Link expired" : "Failed",
+        "queued" => "Queued",
+        "paused" when AwaitingConfirmation => "Waiting for you",
+        "paused" => "Paused",
+        _ => StatusText,
+    };
+
+    public string StateGlyph => State switch
+    {
+        "completed" => "\uE73E",
+        "failed" => "\uEA39",
+        "queued" => "\uE823",
+        "paused" when AwaitingConfirmation => "\uE897",
+        "paused" => "\uE769",
+        _ => "",
+    };
 
     public bool IsPaused => State is "paused" or "queued";
 

@@ -6,19 +6,30 @@
 </head>
 <body>
   <header>
+    <img src="../icons/32.png" alt="" width="22" height="22">
     <strong>Open Download Manager</strong>
-    <span id="host" class="status">Checking…</span>
+    <span id="host" class="pill">Checking…</span>
+    <button id="options" class="icon-btn" title="All settings" aria-label="All settings">
+      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 6.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0 5.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm7.1-3.2-1.5-.3a5.7 5.7 0 0 0-.5-1.2l.9-1.3a.8.8 0 0 0-.1-1l-1-1a.8.8 0 0 0-1-.1l-1.3.9a5.7 5.7 0 0 0-1.2-.5l-.3-1.5a.8.8 0 0 0-.8-.6h-1.4a.8.8 0 0 0-.8.6l-.3 1.5c-.4.1-.8.3-1.2.5l-1.3-.9a.8.8 0 0 0-1 .1l-1 1a.8.8 0 0 0-.1 1l.9 1.3c-.2.4-.4.8-.5 1.2l-1.5.3a.8.8 0 0 0-.6.8v1.4c0 .4.3.7.6.8l1.5.3c.1.4.3.8.5 1.2l-.9 1.3a.8.8 0 0 0 .1 1l1 1c.3.3.7.3 1 .1l1.3-.9c.4.2.8.4 1.2.5l.3 1.5c.1.4.4.6.8.6h1.4c.4 0 .7-.3.8-.6l.3-1.5c.4-.1.8-.3 1.2-.5l1.3.9c.3.2.7.2 1-.1l1-1c.3-.3.3-.7.1-1l-.9-1.3c.2-.4.4-.8.5-1.2l1.5-.3c.4-.1.6-.4.6-.8V9.6a.8.8 0 0 0-.6-.8Z"/></svg>
+    </button>
   </header>
-  <h2>Quick settings</h2>
-  <label class="row toggle"><input type="checkbox" id="enabled"> Send browser downloads to the app</label>
-  <label class="row toggle"><input type="checkbox" id="showVideoButton"> Show the "Download this video" button</label>
-  <label class="row toggle" id="siteRow" hidden><input type="checkbox" id="siteOn"> Use on <span id="siteName"></span></label>
-  <p class="muted small">Hold Alt while clicking a link to leave that download to the browser.</p>
-  <h2>Media on this page</h2>
-  <ul id="media"></ul>
-  <p id="empty" class="muted" hidden>Nothing found yet. Start playing the video and reopen this window.</p>
-  <p id="error" class="error" hidden></p>
-  <footer><a href="#" id="options">All settings (file types, sizes, sites)</a></footer>
+
+  <main>
+    <div class="section-title"><span>On this page</span><span id="count" class="count"></span></div>
+    <ul id="cards"></ul>
+    <div id="empty" class="empty" hidden>
+      <svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="6" y="10" width="36" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M21 18.5v11l9-5.5z" fill="currentColor"/></svg>
+      <p id="emptyTitle">No videos found yet</p>
+      <p id="emptyText" class="muted">Start playing a video, then open this window again.</p>
+    </div>
+    <p id="error" class="error" hidden></p>
+  </main>
+
+  <footer>
+    <label class="switch"><input type="checkbox" id="enabled"><span class="track"></span>Catch downloads</label>
+    <label class="switch"><input type="checkbox" id="showVideoButton"><span class="track"></span>Video button</label>
+    <label class="switch" id="siteRow" hidden><input type="checkbox" id="siteOn"><span class="track"></span><span id="siteName"></span></label>
+  </footer>
   <script type="module" src="popup.js"></script>
 </body>
 </html>

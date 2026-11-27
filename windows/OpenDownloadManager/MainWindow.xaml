@@ -14,15 +14,23 @@
     <Grid x:Name="Root">
         <Grid.Resources>
             <!-- Column headers: flat text buttons that sort the list. -->
-            <Style x:Key="HeaderButton" TargetType="Button">
+            <!-- Column headers: subtle buttons (no fill until hovered), like Fluent table headers. -->
+            <Style x:Key="HeaderButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                 <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="Padding" Value="0,4" />
+                <Setter Property="Padding" Value="8,5" />
+                <Setter Property="Margin" Value="-8,0,0,0" />
+                <Setter Property="CornerRadius" Value="4" />
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
                 <Setter Property="HorizontalContentAlignment" Value="Left" />
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Setter Property="FontSize" Value="12" />
             </Style>
+            <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+            <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+            <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+            <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
             <Style x:Key="Cell" TargetType="TextBlock">
                 <Setter Property="VerticalAlignment" Value="Center" />
                 <Setter Property="TextTrimming" Value="CharacterEllipsis" />
@@ -58,10 +66,10 @@
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE896;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Unfinished" Tag="active">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE769;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE823;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Finished" Tag="completed">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE73E;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE930;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItemHeader Content="Categories" />
                 <NavigationViewItem Content="Video" Tag="Video">
@@ -74,7 +82,7 @@
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A5;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Programs" Tag="Programs">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE7B8;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xECAA;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Archives" Tag="Archives">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xF012;" /></NavigationViewItem.Icon>
@@ -152,10 +160,9 @@
                                 <MenuFlyout x:Name="ViewMenu" Placement="BottomEdgeAlignedRight" Opening="OnViewMenuOpening">
                                     <MenuFlyoutSubItem Text="Columns">
                                         <ToggleMenuFlyoutItem x:Name="ColSize" Text="Size" Click="OnColumnToggle" Tag="size" />
-                                        <ToggleMenuFlyoutItem x:Name="ColProgress" Text="Progress" Click="OnColumnToggle" Tag="progress" />
+                                        <ToggleMenuFlyoutItem x:Name="ColProgress" Text="Progress and status" Click="OnColumnToggle" Tag="progress" />
                                         <ToggleMenuFlyoutItem x:Name="ColSpeed" Text="Speed" Click="OnColumnToggle" Tag="speed" />
                                         <ToggleMenuFlyoutItem x:Name="ColTimeLeft" Text="Time left" Click="OnColumnToggle" Tag="timeLeft" />
-                                        <ToggleMenuFlyoutItem x:Name="ColStatus" Text="Status" Click="OnColumnToggle" Tag="status" />
                                         <ToggleMenuFlyoutItem x:Name="ColAdded" Text="Date added" Click="OnColumnToggle" Tag="added" />
                                     </MenuFlyoutSubItem>
                                     <MenuFlyoutSubItem Text="Density">
@@ -178,8 +185,8 @@
 
                 <InfoBar x:Name="Info" Grid.Row="2" IsOpen="False" Severity="Error" IsClosable="True" />
 
-                <!-- Column headers, laid out like the rows below. -->
-                <Grid x:Name="Header" Grid.Row="3" Padding="14,0,12,0" ColumnSpacing="12" BorderThickness="0,0,0,1"
+                <!-- Column headers, laid out like the rows below. A chevron marks the sorted column. -->
+                <Grid x:Name="Header" Grid.Row="3" Padding="12,0,12,2" ColumnSpacing="12" BorderThickness="0,0,0,1"
                       BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="32" />
@@ -189,35 +196,45 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <CheckBox x:Name="SelectAll" MinWidth="0" Padding="0" VerticalAlignment="Center" Click="OnSelectAllClick"
                               ToolTipService.ToolTip="Check all" />
-                    <Button Grid.Column="1" Style="{StaticResource HeaderButton}" Tag="name" Click="OnSortClick">
-                        <TextBlock x:Name="HName" Text="Name" Margin="12,0,0,0" />
+                    <Button Grid.Column="1" Style="{StaticResource HeaderButton}" Tag="name" Click="OnSortClick" Margin="22,0,0,0">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Name" />
+                            <FontIcon x:Name="SortName" FontSize="10" Visibility="Collapsed" />
+                        </StackPanel>
                     </Button>
                     <Button Grid.Column="2" Width="130" Style="{StaticResource HeaderButton}" Tag="size" Click="OnSortClick"
                             Visibility="{x:Bind services:ViewSettings.Current.SizeColumn, Mode=OneWay}">
-                        <TextBlock x:Name="HSize" Text="Size" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Size" />
+                            <FontIcon x:Name="SortSize" FontSize="10" Visibility="Collapsed" />
+                        </StackPanel>
                     </Button>
-                    <Button Grid.Column="3" Width="140" Style="{StaticResource HeaderButton}" Tag="progress" Click="OnSortClick"
+                    <Button Grid.Column="3" Width="170" Style="{StaticResource HeaderButton}" Tag="progress" Click="OnSortClick"
                             Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}">
-                        <TextBlock x:Name="HProgress" Text="Progress" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Progress" />
+                            <FontIcon x:Name="SortProgress" FontSize="10" Visibility="Collapsed" />
+                        </StackPanel>
                     </Button>
                     <Button Grid.Column="4" Width="90" Style="{StaticResource HeaderButton}" Tag="speed" Click="OnSortClick"
                             Visibility="{x:Bind services:ViewSettings.Current.SpeedColumn, Mode=OneWay}">
-                        <TextBlock x:Name="HSpeed" Text="Speed" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Speed" />
+                            <FontIcon x:Name="SortSpeed" FontSize="10" Visibility="Collapsed" />
+                        </StackPanel>
                     </Button>
                     <TextBlock Grid.Column="5" Width="80" Text="Time left" FontSize="12" VerticalAlignment="Center"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                Visibility="{x:Bind services:ViewSettings.Current.TimeLeftColumn, Mode=OneWay}" />
-                    <Button Grid.Column="6" Width="120" Style="{StaticResource HeaderButton}" Tag="status" Click="OnSortClick"
-                            Visibility="{x:Bind services:ViewSettings.Current.StatusColumn, Mode=OneWay}">
-                        <TextBlock x:Name="HStatus" Text="Status" />
-                    </Button>
-                    <Button Grid.Column="7" Width="110" Style="{StaticResource HeaderButton}" Tag="added" Click="OnSortClick"
+                    <Button Grid.Column="6" Width="110" Style="{StaticResource HeaderButton}" Tag="added" Click="OnSortClick"
                             Visibility="{x:Bind services:ViewSettings.Current.AddedColumn, Mode=OneWay}">
-                        <TextBlock x:Name="HAdded" Text="Added" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Added" />
+                            <FontIcon x:Name="SortAdded" FontSize="10" Visibility="Collapsed" />
+                        </StackPanel>
                     </Button>
                 </Grid>
 
@@ -269,37 +286,50 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                    <FontIcon Glyph="{x:Bind Glyph, Mode=OneWay}" FontSize="{x:Bind services:ViewSettings.Current.IconSize, Mode=OneWay}"
-                                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                                </StackPanel>
-                                <TextBlock Margin="30,0,0,0" Text="{x:Bind DisplayName, Mode=OneWay}" VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" MaxLines="1"
-                                           FontSize="{x:Bind services:ViewSettings.Current.RowFontSize, Mode=OneWay}" />
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid Width="{x:Bind services:ViewSettings.Current.IconSize, Mode=OneWay}"
+                                          Height="{x:Bind services:ViewSettings.Current.IconSize, Mode=OneWay}" VerticalAlignment="Center">
+                                        <FontIcon Glyph="{x:Bind Glyph, Mode=OneWay}" FontSize="16"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                  Visibility="{x:Bind NoIcon, Mode=OneWay}" />
+                                        <Image Source="{x:Bind Icon, Mode=OneWay}" Stretch="Uniform" />
+                                    </Grid>
+                                    <TextBlock Grid.Column="1" Text="{x:Bind DisplayName, Mode=OneWay}" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" MaxLines="1"
+                                               FontSize="{x:Bind services:ViewSettings.Current.RowFontSize, Mode=OneWay}" />
+                                </Grid>
                                 <TextBlock Grid.Column="1" Width="130" Style="{StaticResource Cell}" Text="{x:Bind SizeText, Mode=OneWay}"
                                            Visibility="{x:Bind services:ViewSettings.Current.SizeColumn, Mode=OneWay}" />
-                                <Grid Grid.Column="2" Width="140" ColumnSpacing="8"
+                                <!-- Progress and status in one column: a bar while it runs, a word when it is not. -->
+                                <Grid Grid.Column="2" Width="170"
                                       Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="38" />
-                                    </Grid.ColumnDefinitions>
-                                    <ProgressBar VerticalAlignment="Center" Maximum="100" Value="{x:Bind Progress, Mode=OneWay}"
-                                                 IsIndeterminate="{x:Bind IsIndeterminate, Mode=OneWay}" ShowError="{x:Bind IsFailed, Mode=OneWay}"
-                                                 ShowPaused="{x:Bind IsPaused, Mode=OneWay}" />
-                                    <TextBlock Grid.Column="1" Style="{StaticResource Cell}" HorizontalAlignment="Right" FontSize="12"
-                                               Text="{x:Bind ProgressPercent, Mode=OneWay}" />
+                                    <Grid ColumnSpacing="8" Visibility="{x:Bind BarVisible, Mode=OneWay}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ProgressBar VerticalAlignment="Center" Maximum="100" Value="{x:Bind Progress, Mode=OneWay}"
+                                                     IsIndeterminate="{x:Bind IsIndeterminate, Mode=OneWay}"
+                                                     ShowPaused="{x:Bind IsPaused, Mode=OneWay}" />
+                                        <TextBlock Grid.Column="1" Style="{StaticResource Cell}" FontSize="12" MinWidth="34" TextAlignment="Right"
+                                                   Text="{x:Bind BarText, Mode=OneWay}" />
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                                                Visibility="{x:Bind StateVisible, Mode=OneWay}">
+                                        <FontIcon Glyph="{x:Bind StateGlyph, Mode=OneWay}" FontSize="12" Foreground="{x:Bind StatusBrush, Mode=OneWay}" />
+                                        <TextBlock Style="{StaticResource Cell}" Text="{x:Bind StateText, Mode=OneWay}" Foreground="{x:Bind StatusBrush, Mode=OneWay}" />
+                                    </StackPanel>
                                 </Grid>
                                 <TextBlock Grid.Column="3" Width="90" Style="{StaticResource Cell}" Text="{x:Bind SpeedText, Mode=OneWay}"
                                            Visibility="{x:Bind services:ViewSettings.Current.SpeedColumn, Mode=OneWay}" />
                                 <TextBlock Grid.Column="4" Width="80" Style="{StaticResource Cell}" Text="{x:Bind TimeLeftText, Mode=OneWay}"
                                            Visibility="{x:Bind services:ViewSettings.Current.TimeLeftColumn, Mode=OneWay}" />
-                                <TextBlock Grid.Column="5" Width="120" Style="{StaticResource Cell}" Text="{x:Bind StatusText, Mode=OneWay}"
-                                           Foreground="{x:Bind StatusBrush, Mode=OneWay}"
-                                           Visibility="{x:Bind services:ViewSettings.Current.StatusColumn, Mode=OneWay}" />
-                                <TextBlock Grid.Column="6" Width="110" Style="{StaticResource Cell}" Text="{x:Bind AddedText, Mode=OneWay}"
+                                <TextBlock Grid.Column="5" Width="110" Style="{StaticResource Cell}" Text="{x:Bind AddedText, Mode=OneWay}"
                                            Visibility="{x:Bind services:ViewSettings.Current.AddedColumn, Mode=OneWay}" />
                             </Grid>
                         </DataTemplate>

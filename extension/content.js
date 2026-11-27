@@ -1,6 +1,8 @@
-// Finds <video> and <audio> elements on the page, reports their sources, and shows a
-// "Download video" button over videos. On YouTube the button opens a quality menu that the
-// desktop app fills in.
+// Finds <video> and <audio> elements on the page and reports each one (poster, title, length and,
+// on sites like X or Reddit, the post it belongs to) so the popup can show it as a card. Shows a
+// "Download this video" button over videos. The button always targets the video it sits on:
+// on YouTube and post sites it sends that video's own page link and opens a quality menu; on
+// other sites it sends the stream the extension saw that video load.
 (() => {
   if (window.__odmLoaded) return;
   window.__odmLoaded = true;
@@ -16,7 +18,6 @@
     }
   });
 
-  const reported = new Set();
   let showButton = true;
   const siteSkipped = (s) => (s?.excludedHosts || []).some((p) => {
     p = p.trim().toLowerCase().replace(/^\*\./, '').replace(/^www\./, '');
@@ -29,25 +30,89 @@
   // YouTube pages (and youtube embeds in other sites' iframes) are sent as page links.
   const isYouTube = /(^|\.)youtube(-nocookie)?\.com$/i.test(location.hostname);
 
-  // ----- reporting media elements -----
-  function sourcesOf(el) {
-    const urls = [el.currentSrc, el.src, ...[...el.querySelectorAll('source')].map((s) => s.src)];
-    return [...new Set(urls.filter(Boolean))];
+  // lib/sites.js holds the post-link rules; content scripts load modules dynamically.
+  let sites = null;
+  import(chrome.runtime.getURL('lib/sites.js')).then((m) => { sites = m; scanSoon(); }).catch(() => {});
+
+  // ----- identifying videos -----
+
+  function idOf(el) {
+    if (!el.dataset.odmId) el.dataset.odmId = Math.random().toString(36).slice(2, 10);
+    return el.dataset.odmId;
   }
 
-  function scan() {
-    if (isYouTube) return; // its <video> plays from blob: and its streams are split
-    const items = [];
-    for (const el of document.querySelectorAll('video, audio')) {
-      const kind = el.tagName === 'VIDEO' ? 'video' : 'audio';
-      for (const url of sourcesOf(el)) {
-        if (!/^https?:/i.test(url) || reported.has(url)) continue; // blob: sources are found from network traffic instead
-        reported.add(url);
-        items.push({ kind, url });
+  /** The link of the post this video belongs to, on sites where yt-dlp extracts posts. */
+  function permalinkOf(el) {
+    if (!sites) return null;
+    if (isYouTube) return sites.pageDownloadUrl(location.href);
+    if (!sites.isPostSite(location.hostname)) return null;
+    const container = el.closest('article, shreddit-post, [data-testid="post-container"], [data-e2e="recommend-list-item-container"]');
+    if (container) {
+      // A post's timestamp links to the post itself on X; Reddit keeps it in an attribute.
+      const stamp = container.querySelector('a[href*="/status/"] time')?.closest('a');
+      const candidates = [
+        stamp?.href,
+        container.getAttribute?.('permalink') && new URL(container.getAttribute('permalink'), location.origin).href,
+        ...[...container.querySelectorAll('a[href*="/status/"], a[href*="/comments/"], a[href*="/p/"], a[href*="/reel/"], a[href*="/video/"]')].map((a) => a.href)
+      ];
+      for (const c of candidates) {
+        const p = c && sites.postUrl(c);
+        if (p) return p;
       }
     }
-    if (items.length) send({ type: 'page-media', items });
+    return sites.postUrl(location.href);
   }
+
+  function titleOf(el) {
+    const container = el.closest('article, shreddit-post');
+    const text = container?.getAttribute?.('post-title')
+      || container?.querySelector('[data-testid="tweetText"]')?.textContent
+      || el.getAttribute('aria-label') || el.title || document.title;
+    return (text || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+  }
+
+  function posterOf(el, onlyVideo) {
+    if (el.poster) return el.poster;
+    // A page with one video usually advertises its thumbnail.
+    if (onlyVideo) return document.querySelector('meta[property="og:image"]')?.content || '';
+    return '';
+  }
+
+  const lastSent = new Map();
+
+  /** Tells the extension about every visible-sized video on the page. */
+  function scan() {
+    const els = [...document.querySelectorAll('video, audio')];
+    const videos = els.filter((el) => el.tagName === 'AUDIO' || el.clientWidth >= 160 || !el.paused);
+    const items = [];
+    for (const el of videos) {
+      const src = [el.currentSrc, el.src, ...[...el.querySelectorAll('source')].map((s) => s.src)].find((u) => /^https?:/i.test(u || '')) || '';
+      const info = {
+        videoId: idOf(el),
+        kind: el.tagName === 'VIDEO' ? 'video' : 'audio',
+        src,
+        poster: posterOf(el, videos.length === 1),
+        title: titleOf(el),
+        duration: Number.isFinite(el.duration) ? el.duration : 0,
+        width: el.videoWidth || 0,
+        height: el.videoHeight || 0,
+        pageUrl: permalinkOf(el) || ''
+      };
+      const key = JSON.stringify(info);
+      if (lastSent.get(info.videoId) === key) continue;
+      lastSent.set(info.videoId, key);
+      items.push(info);
+    }
+    if (items.length) send({ type: 'page-videos', items });
+  }
+
+  // Streams a page loads right after a video starts belong to that video.
+  document.addEventListener('play', (e) => {
+    if (e.target instanceof HTMLMediaElement) {
+      send({ type: 'video-playing', videoId: idOf(e.target) });
+      scanSoon();
+    }
+  }, true);
 
   // ----- the floating button and menu -----
   const LABEL = 'Download this video';
@@ -87,7 +152,7 @@
     button.addEventListener('click', onButton);
     root.addEventListener('mouseenter', () => clearTimeout(hideTimer));
     root.addEventListener('mouseleave', scheduleHide);
-    // Keep YouTube's player from treating our clicks as play/pause.
+    // Keep the page's player from treating our clicks as play/pause.
     for (const ev of ['mousedown', 'mouseup', 'click', 'dblclick', 'pointerdown', 'pointerup']) {
       root.addEventListener(ev, (e) => e.stopPropagation());
     }
@@ -105,10 +170,10 @@
     if (menu) { menu.hidden = true; menu.replaceChildren(); }
   }
 
-  async function sendItem(item) {
+  async function sendItem(item, videoId) {
     closeMenu();
     button.textContent = 'Sending…';
-    const r = await send({ type: 'send-media', item, pageUrl: location.href, source: 'video-button' });
+    const r = await send({ type: 'send-media', item, videoId, pageUrl: location.href, source: 'video-button' });
     flash(r?.ok ? 'Sent to Open Download Manager' : 'Could not send', r?.ok ? '' : r?.error || '');
   }
 
@@ -130,31 +195,34 @@
     return row;
   }
 
+  const note = (text) => Object.assign(document.createElement('div'), { className: 'odm-note', textContent: text, title: text });
+
   async function onButton() {
     if (menuOpen) return closeMenu();
-    if (!isYouTube) {
-      const src = target && (target.currentSrc || target.src);
+    if (!target) return;
+    const videoId = idOf(target);
+    const page = permalinkOf(target);
+    if (!page) {
+      // A plain file plays straight from its address; anything else uses the stream seen for it.
+      const src = target.currentSrc || target.src;
       const item = src && /^https?:/i.test(src) ? { kind: 'video', url: src, mime: '', size: -1, referrer: location.href } : null;
-      return sendItem(item);
+      return sendItem(item, videoId);
     }
-    // YouTube: ask the desktop app for the qualities, then show them under the button.
+    // A page link: ask the desktop app for the qualities, then show them under the button.
     menuOpen = true;
-    menu.replaceChildren(Object.assign(document.createElement('div'), { className: 'odm-note', textContent: 'Getting qualities…' }));
+    menu.replaceChildren(note('Getting qualities…'));
     menu.hidden = false;
-    const r = await send({ type: 'probe-page', url: location.href });
+    const r = await send({ type: 'probe-page', url: page });
     if (!menuOpen) return;
     if (!r?.ok || !r.formats?.length) {
-      // Older app or probe failed: offer the best quality only.
       if (!r?.url) { closeMenu(); return flash('Could not send', r?.error || ''); }
-      const best = menuRow('Best quality', '', () => sendItem({ kind: 'page', url: r.url }));
       const why = r?.error ? `Could not list the qualities: ${r.error}` : 'Could not list the qualities';
-      const note = Object.assign(document.createElement('div'), { className: 'odm-note', textContent: why, title: why });
-      menu.replaceChildren(note, best);
+      menu.replaceChildren(note(why), menuRow('Best quality', '', () => sendItem({ kind: 'page', url: r.url }, videoId)));
       return;
     }
     const rows = r.formats.map((f) => menuRow(f.label || f.id, [f.ext, formatSize(f.size)].filter(Boolean).join(' · '),
-      () => sendItem({ kind: 'page', url: r.url, formatId: f.id, size: f.size > 0 ? f.size : -1 })));
-    if (r.title) rows.unshift(Object.assign(document.createElement('div'), { className: 'odm-note', textContent: r.title }));
+      () => sendItem({ kind: 'page', url: r.url, formatId: f.id, size: f.size > 0 ? f.size : -1 }, videoId)));
+    if (r.title) rows.unshift(note(r.title));
     menu.replaceChildren(...rows);
   }
 
@@ -204,7 +272,7 @@
   window.addEventListener('resize', follow, { passive: true });
   document.addEventListener('fullscreenchange', () => setTimeout(follow, 100));
   // YouTube changes videos without reloading the page.
-  window.addEventListener('yt-navigate-finish', () => { dismissed = false; closeMenu(); root?.classList.remove('odm-visible'); });
+  window.addEventListener('yt-navigate-finish', () => { dismissed = false; closeMenu(); root?.classList.remove('odm-visible'); lastSent.clear(); scanSoon(); });
   // Settings changed in the popup take effect without reloading the page.
   chrome.storage.onChanged.addListener((changes) => {
     if (!changes.settings) return;
@@ -212,11 +280,11 @@
     if (!showButton) { closeMenu(); root?.classList.remove('odm-visible'); }
   });
 
-  scan();
   let scanTimer = null;
-  const scanSoon = () => { clearTimeout(scanTimer); scanTimer = setTimeout(scan, 300); };
-  new MutationObserver(scanSoon).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
-  document.addEventListener('loadedmetadata', scan, true);
+  function scanSoon() { clearTimeout(scanTimer); scanTimer = setTimeout(scan, 400); }
+  scanSoon();
+  new MutationObserver(scanSoon).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'poster'] });
+  document.addEventListener('loadedmetadata', scanSoon, true);
 
   // ----- "Download all links" and Alt+click -----
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

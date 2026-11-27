@@ -57,17 +57,20 @@ public sealed partial class MainWindow : Window
         if (sender is Button { Tag: string column }) ViewModel.SortOn(column);
     }
 
-    /// <summary>An arrow on the sorted column's header.</summary>
+    /// <summary>A small chevron on the sorted column's header, pointing the sort direction.</summary>
     private void ShowSortArrows()
     {
-        var arrow = ViewModel.SortDescending ? "  \u2193" : "  \u2191";
-        void Set(TextBlock t, string label, string key) => t.Text = ViewModel.SortBy == key ? label + arrow : label;
-        Set(HName, "Name", "name");
-        Set(HSize, "Size", "size");
-        Set(HProgress, "Progress", "progress");
-        Set(HSpeed, "Speed", "speed");
-        Set(HStatus, "Status", "status");
-        Set(HAdded, "Added", "added");
+        var glyph = ViewModel.SortDescending ? "\uE70D" : "\uE70E";
+        void Set(FontIcon icon, string key)
+        {
+            icon.Glyph = glyph;
+            icon.Visibility = ViewModel.SortBy == key ? Visibility.Visible : Visibility.Collapsed;
+        }
+        Set(SortName, "name");
+        Set(SortSize, "size");
+        Set(SortProgress, "progress");
+        Set(SortSpeed, "speed");
+        Set(SortAdded, "added");
     }
 
     private void OnViewMenuOpening(object? sender, object e)
@@ -77,7 +80,6 @@ public sealed partial class MainWindow : Window
         ColProgress.IsChecked = v.ShowProgress;
         ColSpeed.IsChecked = v.ShowSpeed;
         ColTimeLeft.IsChecked = v.ShowTimeLeft;
-        ColStatus.IsChecked = v.ShowStatus;
         ColAdded.IsChecked = v.ShowAdded;
         DensityCompact.IsChecked = v.Density == "compact";
         DensityStandard.IsChecked = v.Density == "standard";
@@ -98,7 +100,6 @@ public sealed partial class MainWindow : Window
             case "progress": v.ShowProgress = item.IsChecked; break;
             case "speed": v.ShowSpeed = item.IsChecked; break;
             case "timeLeft": v.ShowTimeLeft = item.IsChecked; break;
-            case "status": v.ShowStatus = item.IsChecked; break;
             case "added": v.ShowAdded = item.IsChecked; break;
         }
     }
@@ -193,22 +194,19 @@ public sealed partial class MainWindow : Window
             ShowError(reply["error"]?.GetValue<string>() ?? "The engine refused that.");
     }
 
+    private SettingsPage? _settingsPage;
+
+    /// <summary>Settings is a full page in place of the list; any other item shows the list again.</summary>
     private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         if (args.IsSettingsSelected)
         {
-            _ = OpenSettings();
+            _settingsPage ??= new SettingsPage(ViewModel.Core, ViewModel.AppSettings, Hwnd);
+            Nav.Content = _settingsPage;
             return;
         }
+        Nav.Content = Body;
         if (args.SelectedItem is NavigationViewItem { Tag: string tag }) ViewModel.Filter = tag;
-    }
-
-    private async Task OpenSettings()
-    {
-        var dialog = new SettingsDialog(ViewModel.Core, ViewModel.AppSettings, Hwnd) { XamlRoot = Content.XamlRoot };
-        await dialog.ShowAsync();
-        // Back to the list the user was on.
-        Nav.SelectedItem = Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => (string)i.Tag == ViewModel.Filter);
     }
 
     public async void OpenAddDialog(string? url, bool probe = false)

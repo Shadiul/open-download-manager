@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyMedia, totalFromContentRange, mediaKey, extensionOf } from '../extension/lib/media.js';
+import { classifyMedia, totalFromContentRange, mediaKey, extensionOf, parseHls } from '../extension/lib/media.js';
 import { shouldCatch, DEFAULT_SETTINGS } from '../extension/lib/rules.js';
 import { pickFileLinks } from '../extension/lib/links.js';
+import { buildCards, formatDuration } from '../extension/lib/cards.js';
 
 const MB = 1024 * 1024;
 
@@ -103,6 +104,49 @@ test('pickFileLinks keeps file links once, in page order', () => {
     { url: 'https://e.com/a.zip', text: 'A' },
     { url: 'https://e.com/My%20Doc.PDF?dl=1', text: 'doc' }
   ]);
+});
+
+test('postUrl gives one canonical link per post', async () => {
+  const { postUrl, isPostSite } = await import('../extension/lib/sites.js');
+  assert.equal(postUrl('https://x.com/nasa/status/1861234567890/video/1?s=20'), 'https://x.com/nasa/status/1861234567890');
+  assert.equal(postUrl('https://twitter.com/nasa/status/42'), 'https://x.com/nasa/status/42');
+  assert.equal(postUrl('https://x.com/home'), null);
+  assert.equal(postUrl('https://www.reddit.com/r/videos/comments/abc123/some_title/'), 'https://www.reddit.com/r/videos/comments/abc123/');
+  assert.equal(postUrl('https://www.instagram.com/someone/reel/Cx1_ab/'), 'https://www.instagram.com/reel/Cx1_ab/');
+  assert.equal(postUrl('https://www.tiktok.com/@me/video/7300000000000000000?lang=en'), 'https://www.tiktok.com/@me/video/7300000000000000000');
+  assert.equal(postUrl('https://example.com/status/1'), null);
+  assert.equal(isPostSite('x.com'), true);
+  assert.equal(isPostSite('example.com'), false);
+});
+
+test('parseHls tells master playlists from media playlists', () => {
+  const master = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360\nlow.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720\nhigh.m3u8\n';
+  assert.deepEqual(parseHls(master), { master: true, height: 720 });
+  assert.deepEqual(parseHls('#EXTM3U\n#EXTINF:4.0,\nseg1.ts\n'), { master: false, height: null });
+  assert.deepEqual(parseHls('#EXT-X-STREAM-INF:RESOLUTION=720x1280\nv.m3u8'), { master: true, height: 720 }, 'portrait counts its short side');
+});
+
+test('buildCards gives one card per video and hides covered variants', () => {
+  const videos = [
+    { videoId: 'a', title: 'Post with a link', poster: 'p.jpg', duration: 83, pageUrl: 'https://x.com/u/status/1' },
+    { videoId: 'b', title: 'Blob player', poster: '', duration: 10 }
+  ];
+  const streams = [
+    { kind: 'hls', url: 'https://cdn/b/master.m3u8', videoId: 'b', hlsMaster: true, height: 720, seenAt: 1 },
+    { kind: 'hls', url: 'https://cdn/b/360.m3u8', videoId: 'b', hlsMaster: false, seenAt: 2 },
+    { kind: 'hls', url: 'https://cdn/b/720.m3u8', videoId: 'b', hlsMaster: false, seenAt: 3 },
+    { kind: 'video', url: 'https://cdn/other.mp4', size: 5000000, seenAt: 4 }
+  ];
+  const cards = buildCards(videos, streams, 'Page');
+  assert.equal(cards.length, 3);
+  assert.deepEqual(cards[0].item, { kind: 'page', url: 'https://x.com/u/status/1' }, 'post link wins');
+  assert.equal(cards[1].item.url, 'https://cdn/b/master.m3u8', 'the master, not a variant');
+  assert.equal(cards[1].quality, 720);
+  assert.equal(cards[2].item.url, 'https://cdn/other.mp4');
+  assert.equal(cards[2].title, 'other.mp4');
+  assert.equal(formatDuration(83), '1:23');
+  assert.equal(formatDuration(3725), '1:02:05');
+  assert.equal(formatDuration(NaN), '');
 });
 
 import fs from 'node:fs';

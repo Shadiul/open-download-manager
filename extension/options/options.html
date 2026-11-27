@@ -2,38 +2,90 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Open Download Manager settings</title>
   <style>
-    body { max-width: 620px; margin: 24px auto; padding: 0 16px; font: 14px/1.5 "Segoe UI", system-ui, sans-serif; color: #1c1c1c; background: #fff; }
-    @media (prefers-color-scheme: dark) { body { color: #e6e6e6; background: #202124; } textarea, input { background: #2a2b2e; color: inherit; border-color: #555; } }
-    fieldset { border: 1px solid #ddd; border-radius: 8px; margin: 0 0 16px; padding: 12px 16px; }
-    legend { font-weight: 600; }
-    label { display: block; margin: 6px 0; }
-    textarea { width: 100%; min-height: 70px; font: 13px ui-monospace, Consolas, monospace; box-sizing: border-box; }
-    .hint { color: #888; font-size: 12px; }
-    button { border: 0; border-radius: 6px; padding: 6px 16px; background: #1f6feb; color: #fff; font: inherit; cursor: pointer; }
-    #saved { margin-left: 8px; color: #1f8a3b; }
+    :root {
+      --bg: #f3f3f3; --card: #ffffff; --stroke: rgba(0, 0, 0, 0.0578); --text: #1a1a1a; --muted: #5d5d5d;
+      --accent: #005fb8; --accent-text: #fff; --field: #ffffff; --field-stroke: rgba(0, 0, 0, 0.12); --ok: #0f7b0f;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #202020; --card: #2b2b2b; --stroke: rgba(255, 255, 255, 0.0698); --text: #fff; --muted: #c5c5c5;
+        --accent: #60cdff; --accent-text: #000; --field: #1f1f1f; --field-stroke: rgba(255, 255, 255, 0.1); --ok: #6ccb5f;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+    .page { max-width: 760px; margin: 0 auto; padding: 32px 20px 60px; }
+    header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    header h1 { margin: 0; font: 600 28px/1.2 "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; }
+    h2 { margin: 28px 0 8px; font-size: 14px; font-weight: 600; }
+    .card { background: var(--card); border: 1px solid var(--stroke); border-radius: 8px; padding: 14px 16px; margin-bottom: 4px; }
+    .row { display: flex; align-items: center; gap: 16px; justify-content: space-between; }
+    .row .text { min-width: 0; }
+    .title { font-weight: 400; }
+    .desc { color: var(--muted); font-size: 12px; }
+    textarea, input[type=number] {
+      width: 100%; padding: 6px 10px; border-radius: 4px; border: 1px solid var(--field-stroke); border-bottom-color: var(--muted);
+      background: var(--field); color: var(--text); font: 13px ui-monospace, Consolas, monospace;
+    }
+    input[type=number] { width: 120px; font-family: inherit; font-size: 14px; }
+    textarea { min-height: 76px; margin-top: 10px; resize: vertical; }
+    textarea:focus, input:focus { outline: none; border-bottom: 2px solid var(--accent); }
+    .radios { display: flex; gap: 18px; margin-top: 10px; flex-wrap: wrap; }
+    .radios label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+    input[type=radio] { accent-color: var(--accent); }
+    .switch { position: relative; display: inline-block; width: 40px; height: 20px; flex: none; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch span { position: absolute; inset: 0; border: 1px solid var(--muted); border-radius: 10px; cursor: pointer; transition: background 0.12s; }
+    .switch span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--muted); transition: transform 0.12s; }
+    .switch input:checked + span { background: var(--accent); border-color: var(--accent); }
+    .switch input:checked + span::after { transform: translateX(20px); background: var(--accent-text); }
+    .bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; padding: 16px 0 0; }
+    button { border: 0; border-radius: 4px; padding: 7px 20px; background: var(--accent); color: var(--accent-text); font: 600 14px inherit; cursor: pointer; }
+    #saved { color: var(--ok); }
   </style>
 </head>
 <body>
-  <h1>Open Download Manager</h1>
-  <fieldset>
-    <legend>Downloads</legend>
-    <label><input type="checkbox" id="enabled"> Send browser downloads to Open Download Manager</label>
-    <label><input type="radio" name="mode" value="all"> Catch every download</label>
-    <label><input type="radio" name="mode" value="listed"> Only catch these file types</label>
-    <textarea id="extensions"></textarea>
-    <div class="hint">Separate file types with spaces or commas, without the dot.</div>
-    <label>Skip files smaller than <input type="number" id="minSizeKB" min="0" style="width:90px"> KB</label>
-    <label>Never catch downloads from these sites</label>
-    <textarea id="excludedHosts" placeholder="example.com"></textarea>
-    <div class="hint">One site per line. Subdomains are included.</div>
-  </fieldset>
-  <fieldset>
-    <legend>Video</legend>
-    <label><input type="checkbox" id="showVideoButton"> Show a "Download video" button over videos</label>
-  </fieldset>
-  <button id="save">Save</button><span id="saved" hidden>Saved</span>
+  <div class="page">
+    <header>
+      <img src="../icons/48.png" alt="" width="40" height="40">
+      <h1>Open Download Manager</h1>
+    </header>
+
+    <h2>Downloads</h2>
+    <div class="card row">
+      <div class="text"><div class="title">Send browser downloads to the app</div><div class="desc">Downloads start in Open Download Manager instead of the browser. Hold Alt while clicking a link to skip it once.</div></div>
+      <label class="switch"><input type="checkbox" id="enabled"><span></span></label>
+    </div>
+    <div class="card">
+      <div class="title">Which downloads to send</div>
+      <div class="radios">
+        <label><input type="radio" name="mode" value="all"> Every download</label>
+        <label><input type="radio" name="mode" value="listed"> Only these file types</label>
+      </div>
+      <textarea id="extensions" aria-label="File types"></textarea>
+      <div class="desc">Separate file types with spaces or commas, without the dot.</div>
+    </div>
+    <div class="card row">
+      <div class="text"><div class="title">Leave small files to the browser</div><div class="desc">Files smaller than this many KB download in the browser. 0 sends everything.</div></div>
+      <input type="number" id="minSizeKB" min="0" aria-label="Minimum size in KB">
+    </div>
+    <div class="card">
+      <div class="title">Sites to leave alone</div>
+      <div class="desc">One site per line; subdomains are included. Downloads from these sites stay in the browser, and the video button does not show there.</div>
+      <textarea id="excludedHosts" placeholder="example.com"></textarea>
+    </div>
+
+    <h2>Video</h2>
+    <div class="card row">
+      <div class="text"><div class="title">Show a "Download this video" button over videos</div><div class="desc">The × on the button hides it until the next video.</div></div>
+      <label class="switch"><input type="checkbox" id="showVideoButton"><span></span></label>
+    </div>
+
+    <div class="bar"><button id="save">Save</button><span id="saved" hidden>Saved</span></div>
+  </div>
   <script type="module" src="options.js"></script>
 </body>
 </html>

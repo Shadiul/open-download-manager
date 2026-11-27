@@ -85,3 +85,18 @@ export function mediaKey(url) {
     return url;
   }
 }
+
+/**
+ * Reads an HLS playlist. A master playlist lists the qualities of one video (#EXT-X-STREAM-INF);
+ * a media playlist is one quality's segments. Only masters are worth offering.
+ * @returns {{ master: boolean, height: number | null }}
+ */
+export function parseHls(text) {
+  const master = /#EXT-X-STREAM-INF/i.test(text || '');
+  let height = null;
+  for (const m of (text || '').matchAll(/RESOLUTION=(\d+)x(\d+)/gi)) {
+    const h = Math.min(Number(m[1]), Number(m[2]));
+    if (!height || h > height) height = h;
+  }
+  return { master, height };
+}
