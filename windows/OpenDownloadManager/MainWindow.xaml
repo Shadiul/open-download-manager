@@ -167,26 +167,42 @@
                         </Button>
                     </StackPanel>
 
-                    <StackPanel x:Name="Tools" Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <AutoSuggestBox x:Name="Search" PlaceholderText="Search downloads" Width="220" QueryIcon="Find"
-                                        TextChanged="OnSearchChanged" />
-                        <ComboBox x:Name="StatusBox" Width="140" SelectedIndex="0" SelectionChanged="OnStatusFilterChanged"
-                                  ToolTipService.ToolTip="Show only downloads in this state">
-                            <ComboBoxItem Content="Any status" Tag="any" />
-                            <ComboBoxItem Content="Downloading" Tag="downloading" />
-                            <ComboBoxItem Content="Queued" Tag="queued" />
-                            <ComboBoxItem Content="Paused" Tag="paused" />
-                            <ComboBoxItem Content="Finished" Tag="completed" />
-                            <ComboBoxItem Content="Failed" Tag="failed" />
-                        </ComboBox>
-                        <DropDownButton ToolTipService.ToolTip="Choose which columns the list shows">
-                            <DropDownButton.Content>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <FontIcon Glyph="&#xE9D5;" FontSize="14" />
-                                    <TextBlock Text="Columns" />
-                                </StackPanel>
-                            </DropDownButton.Content>
-                            <DropDownButton.Flyout>
+                    <!-- Search, then compact icon buttons with tooltips: filter, columns, view. -->
+                    <StackPanel x:Name="Tools" Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                        <StackPanel.Resources>
+                            <Style TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Width" Value="36" />
+                                <Setter Property="Height" Value="34" />
+                                <Setter Property="CornerRadius" Value="4" />
+                            </Style>
+                        </StackPanel.Resources>
+                        <AutoSuggestBox x:Name="Search" PlaceholderText="Search" Width="200" QueryIcon="Find"
+                                        Margin="0,0,6,0" VerticalAlignment="Center" TextChanged="OnSearchChanged" />
+                        <Button x:Name="StatusButton" ToolTipService.ToolTip="Show: any status" AutomationProperties.Name="Filter by status">
+                            <Grid>
+                                <FontIcon Glyph="&#xE71C;" FontSize="16" />
+                                <!-- A dot while a filter is on. -->
+                                <Ellipse x:Name="StatusDot" Width="7" Height="7" Margin="0,-3,-5,0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                         Fill="{ThemeResource AccentFillColorDefaultBrush}" Visibility="Collapsed" />
+                            </Grid>
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                    <RadioMenuFlyoutItem Text="Any status" GroupName="status" Tag="any" IsChecked="True" Click="OnStatusFilterClick" />
+                                    <MenuFlyoutSeparator />
+                                    <RadioMenuFlyoutItem Text="Downloading" GroupName="status" Tag="downloading" Click="OnStatusFilterClick" />
+                                    <RadioMenuFlyoutItem Text="Queued" GroupName="status" Tag="queued" Click="OnStatusFilterClick" />
+                                    <RadioMenuFlyoutItem Text="Paused" GroupName="status" Tag="paused" Click="OnStatusFilterClick" />
+                                    <RadioMenuFlyoutItem Text="Finished" GroupName="status" Tag="completed" Click="OnStatusFilterClick" />
+                                    <RadioMenuFlyoutItem Text="Failed" GroupName="status" Tag="failed" Click="OnStatusFilterClick" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                        <Button ToolTipService.ToolTip="Columns" AutomationProperties.Name="Columns">
+                            <FontIcon Glyph="&#xE9D5;" FontSize="16" />
+                            <Button.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedRight" Opening="OnViewMenuOpening">
                                     <ToggleMenuFlyoutItem x:Name="ColSize" Text="Size" Click="OnColumnToggle" Tag="size" />
                                     <ToggleMenuFlyoutItem x:Name="ColProgress" Text="Progress and status" Click="OnColumnToggle" Tag="progress" />
@@ -194,16 +210,11 @@
                                     <ToggleMenuFlyoutItem x:Name="ColTimeLeft" Text="Time left" Click="OnColumnToggle" Tag="timeLeft" />
                                     <ToggleMenuFlyoutItem x:Name="ColAdded" Text="Date added" Click="OnColumnToggle" Tag="added" />
                                 </MenuFlyout>
-                            </DropDownButton.Flyout>
-                        </DropDownButton>
-                        <DropDownButton ToolTipService.ToolTip="Density, theme and progress windows">
-                            <DropDownButton.Content>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <FontIcon Glyph="&#xE8FD;" FontSize="14" />
-                                    <TextBlock Text="View" />
-                                </StackPanel>
-                            </DropDownButton.Content>
-                            <DropDownButton.Flyout>
+                            </Button.Flyout>
+                        </Button>
+                        <Button ToolTipService.ToolTip="View: density, theme, progress windows" AutomationProperties.Name="View">
+                            <FontIcon Glyph="&#xE8FD;" FontSize="16" />
+                            <Button.Flyout>
                                 <MenuFlyout x:Name="ViewMenu" Placement="BottomEdgeAlignedRight" Opening="OnViewMenuOpening">
                                     <MenuFlyoutSubItem Text="Density">
                                         <RadioMenuFlyoutItem x:Name="DensityCompact" Text="Compact" GroupName="density" Tag="compact" Click="OnDensityClick" />
@@ -218,8 +229,8 @@
                                     <MenuFlyoutSeparator />
                                     <ToggleMenuFlyoutItem x:Name="ProgressWindows" Text="Open a progress window for each download" Click="OnProgressWindowsToggle" />
                                 </MenuFlyout>
-                            </DropDownButton.Flyout>
-                        </DropDownButton>
+                            </Button.Flyout>
+                        </Button>
                     </StackPanel>
                 </Grid>
 
@@ -332,34 +343,17 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <!-- The row is the progress bar: a fill that glides to the new progress, with a
-                                     shimmer while bytes arrive. Amber when paused, red when failed; fades when done. -->
-                                <!-- The fill stretches with a scale, which would squash rounded corners; this
-                                     fixed rounded frame clips it instead, so the corners stay round. -->
-                                <Grid Grid.ColumnSpan="6" Margin="-12,3,-12,3" CornerRadius="4" IsHitTestVisible="False">
-                                <Grid Background="{x:Bind FillBrush, Mode=OneWay}"
-                                      Scale="{x:Bind FillScale, Mode=OneWay}" CenterPoint="0,0,0"
-                                      Opacity="{x:Bind FillOpacity, Mode=OneWay}"
-                                      Loaded="OnRowFillLoaded">
-                                    <Grid.ScaleTransition>
-                                        <Vector3Transition Duration="0:0:0.45" />
-                                    </Grid.ScaleTransition>
+                                <!-- The row is the progress bar, as a dot matrix: lit dots up to the progress (accent,
+                                     amber when paused, red when failed), faint dots after, and a glow at the front
+                                     while bytes arrive. Views/RowFill.cs drives it; it fades out once done. -->
+                                <Grid Grid.ColumnSpan="6" Margin="-12,3,-12,3" CornerRadius="4" IsHitTestVisible="False"
+                                      Opacity="{x:Bind FillOpacity, Mode=OneWay}" Loaded="OnRowFillLoaded">
                                     <Grid.OpacityTransition>
                                         <ScalarTransition Duration="0:0:0.6" />
                                     </Grid.OpacityTransition>
-                                    <Rectangle Width="140" HorizontalAlignment="Left" Visibility="{x:Bind IsShimmering, Mode=OneWay}">
-                                        <Rectangle.Fill>
-                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                <GradientStop Color="#00FFFFFF" Offset="0" />
-                                                <GradientStop Color="#2EFFFFFF" Offset="0.5" />
-                                                <GradientStop Color="#00FFFFFF" Offset="1" />
-                                            </LinearGradientBrush>
-                                        </Rectangle.Fill>
-                                        <Rectangle.RenderTransform>
-                                            <TranslateTransform />
-                                        </Rectangle.RenderTransform>
-                                    </Rectangle>
-                                </Grid>
+                                    <Border />
+                                    <Border />
+                                    <Rectangle Width="120" HorizontalAlignment="Left" />
                                 </Grid>
                                 <Grid ColumnSpacing="10">
                                     <Grid.ColumnDefinitions>

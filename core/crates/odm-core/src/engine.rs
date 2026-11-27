@@ -621,6 +621,10 @@ async fn fetch_range(seg: &Seg, env: &WorkerEnv) -> Result<(), Attempt> {
         StatusCode::PARTIAL_CONTENT => stream_into(seg, resp, env, false).await,
         StatusCode::OK if !env.resumable && row.cursor == 0 => stream_into(seg, resp, env, true).await,
         StatusCode::OK | StatusCode::RANGE_NOT_SATISFIABLE => Err(Attempt::Stop(WorkerError::Changed)),
+        // A mirror that lacks the file (mirrors lag behind): asking again lands on another one.
+        StatusCode::NOT_FOUND if env.request.mirrored => {
+            Err(Attempt::Retry("This mirror does not have the file".into()))
+        }
         StatusCode::FORBIDDEN | StatusCode::GONE | StatusCode::UNAUTHORIZED => Err(Attempt::Stop(
             WorkerError::Expired(format!("Link expired (server answered {})", status.as_u16())),
         )),

@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -55,9 +55,12 @@ public sealed partial class MainWindow : Window
     private void OnSearchChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args) =>
         ViewModel.SearchText = sender.Text;
 
-    private void OnStatusFilterChanged(object sender, SelectionChangedEventArgs e)
+    private void OnStatusFilterClick(object sender, RoutedEventArgs e)
     {
-        if (StatusBox.SelectedItem is ComboBoxItem { Tag: string tag }) ViewModel.StatusFilter = tag;
+        if (sender is not RadioMenuFlyoutItem { Tag: string tag } item) return;
+        ViewModel.StatusFilter = tag;
+        StatusDot.Visibility = tag == "any" ? Visibility.Collapsed : Visibility.Visible;
+        ToolTipService.SetToolTip(StatusButton, $"Show: {item.Text.ToLowerInvariant()}");
     }
 
     private void OnSortClick(object sender, RoutedEventArgs e)
@@ -168,7 +171,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Narrow windows put search and view options on their own row.</summary>
     private void OnBodySizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var narrow = e.NewSize.Width < 860;
+        var narrow = e.NewSize.Width < 620;
         // When space is short the actions keep their icons and lose their labels, rather than
         // disappearing into the overflow menu.
         var labels = !(e.NewSize.Width < 1040 && !narrow || e.NewSize.Width < 440);
@@ -178,7 +181,7 @@ public sealed partial class MainWindow : Window
         Grid.SetColumn(Tools, narrow ? 0 : 1);
         Grid.SetColumnSpan(Tools, narrow ? 2 : 1);
         Tools.HorizontalAlignment = narrow ? HorizontalAlignment.Stretch : HorizontalAlignment.Right;
-        Search.Width = narrow ? Math.Max(140, e.NewSize.Width - 460) : e.NewSize.Width < 1040 ? 180 : 220;
+        Search.Width = narrow ? Math.Max(140, e.NewSize.Width - 150) : e.NewSize.Width < 1040 ? 170 : 220;
         if (Tools.Parent != Body && narrow)
         {
             ((Panel)Tools.Parent).Children.Remove(Tools);
@@ -200,28 +203,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Starts the shimmer that sweeps across a row's fill while bytes arrive.</summary>
     private void OnRowFillLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not Grid fill || fill.Children.Count == 0 || fill.Children[0] is not Microsoft.UI.Xaml.Shapes.Rectangle shine) return;
-        if (shine.RenderTransform is not Microsoft.UI.Xaml.Media.TranslateTransform move) return;
-        var clip = new Microsoft.UI.Xaml.Media.RectangleGeometry();
-        fill.Clip = clip;
-        void Resize()
-        {
-            clip.Rect = new Windows.Foundation.Rect(0, 0, fill.ActualWidth, fill.ActualHeight);
-            var sweep = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
-            {
-                From = -shine.Width,
-                To = Math.Max(fill.ActualWidth, 200),
-                Duration = TimeSpan.FromSeconds(1.8),
-                RepeatBehavior = Microsoft.UI.Xaml.Media.Animation.RepeatBehavior.Forever,
-            };
-            var story = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
-            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(sweep, move);
-            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(sweep, "X");
-            story.Children.Add(sweep);
-            story.Begin();
-        }
-        fill.SizeChanged += (_, _) => Resize();
-        Resize();
+        if (sender is Grid fill) Views.RowFill.Attach(fill);
     }
 
     // ----- progress windows -----
