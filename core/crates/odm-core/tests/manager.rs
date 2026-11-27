@@ -123,6 +123,12 @@ fn pause_survives_a_restart_and_resumes() {
     assert_eq!(h.call(json!({ "type": "pause", "id": id }))["ok"], true);
     let paused = h.wait_for(id, "pause", |j| j["state"] == "paused" && j["connections"] == 0);
     let fetched = paused["downloaded"].as_u64().unwrap();
+    let details = h.call(json!({ "type": "details", "id": id }));
+    let segments = details["segments"].as_array().unwrap();
+    assert!(segments.len() > 1, "{details}");
+    let mapped: u64 =
+        segments.iter().map(|s| s["cursor"].as_u64().unwrap() - s["start"].as_u64().unwrap()).sum();
+    assert_eq!(mapped, fetched, "the map adds up to what was fetched");
 
     // Restart the core on the same state file: the paused job and its progress are still there.
     let data_dir = h.data_dir.clone();

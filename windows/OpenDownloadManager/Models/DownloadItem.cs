@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.UI.Xaml.Media;
 
 namespace OpenDownloadManager.Models;
 
@@ -68,6 +69,64 @@ public sealed partial class DownloadItem : ObservableObject
         OnPropertyChanged(nameof(IsActive));
         OnPropertyChanged(nameof(IsCompleted));
         OnPropertyChanged(nameof(IsFailed));
+        OnPropertyChanged(nameof(SizeText));
+        OnPropertyChanged(nameof(SpeedText));
+        OnPropertyChanged(nameof(TimeLeftText));
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(AddedText));
+        OnPropertyChanged(nameof(CanPause));
+        OnPropertyChanged(nameof(CanResume));
+        OnPropertyChanged(nameof(IsPaused));
+        OnPropertyChanged(nameof(ProgressPercent));
+        OnPropertyChanged(nameof(StatusBrush));
+    }
+
+    public bool IsPaused => State is "paused" or "queued";
+
+    public string ProgressPercent => TotalSize is > 0 || IsCompleted ? $"{Progress:0}%" : "";
+
+    /// <summary>Red for failed, green for done, the accent while downloading, grey otherwise.</summary>
+    public Brush? StatusBrush => Microsoft.UI.Xaml.Application.Current.Resources[State switch
+    {
+        "failed" => "SystemFillColorCriticalBrush",
+        "completed" => "SystemFillColorSuccessBrush",
+        "downloading" or "connecting" => "AccentTextFillColorPrimaryBrush",
+        _ => "TextFillColorSecondaryBrush",
+    }] as Brush;
+
+    // ----- one-line column texts -----
+
+    /// <summary>"12.3 MB / 100 MB" while running, the size once done.</summary>
+    public string SizeText => TotalSize is > 0
+        ? IsCompleted || Downloaded <= 0 ? Format.Bytes(TotalSize.Value) : $"{Format.Bytes(Downloaded)} / {Format.Bytes(TotalSize.Value)}"
+        : Downloaded > 0 ? Format.Bytes(Downloaded) : "";
+
+    public string SpeedText => State == "downloading" && Speed > 0 ? Format.Speed(Speed) : "";
+
+    public string TimeLeftText => State == "downloading" && Speed > 0 && TotalSize is > 0
+        ? Format.Duration((TotalSize.Value - Downloaded) / (double)Speed) : "";
+
+    public string StatusText => State switch
+    {
+        "queued" => "Queued",
+        "connecting" => "Connecting",
+        "downloading" => Connections > 1 ? $"{Connections} connections" : "Downloading",
+        "waitingToRetry" => "Retrying",
+        "paused" when AwaitingConfirmation => "Waiting for you",
+        "paused" => "Paused",
+        "completed" => "Done",
+        "failed" => LinkExpired ? "Link expired" : "Failed",
+        _ => State,
+    };
+
+    public string AddedText
+    {
+        get
+        {
+            if (CreatedAt <= 0) return "";
+            var t = DateTimeOffset.FromUnixTimeMilliseconds(CreatedAt).LocalDateTime;
+            return t.Date == DateTime.Today ? t.ToString("t") : t.ToString("d MMM, t");
+        }
     }
 
     private static string? Str(JsonObject j, string key) => j[key] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;

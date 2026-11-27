@@ -109,6 +109,7 @@ public sealed class NewDownloadWindow : Window
             p.IsAlwaysOnTop = true;
         }
         CenterOnScreen();
+        ViewSettings.Current.Track(this);
         // Closing the window with its X is the same as Cancel.
         AppWindow.Closing += async (_, e) =>
         {

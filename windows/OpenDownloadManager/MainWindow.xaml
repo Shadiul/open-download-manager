@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:OpenDownloadManager.Models"
+    xmlns:services="using:OpenDownloadManager.Services"
     Title="Open Download Manager">
 
     <Window.SystemBackdrop>
@@ -11,14 +12,33 @@
     </Window.SystemBackdrop>
 
     <Grid x:Name="Root">
+        <Grid.Resources>
+            <!-- Column headers: flat text buttons that sort the list. -->
+            <Style x:Key="HeaderButton" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0,4" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Left" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="FontSize" Value="12" />
+            </Style>
+            <Style x:Key="Cell" TargetType="TextBlock">
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="TextWrapping" Value="NoWrap" />
+                <Setter Property="MaxLines" Value="1" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <Grid x:Name="AppTitleBar" Padding="16,0,0,0">
-            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                <Image Source="ms-appx:///Assets/app.png" Width="18" Height="18" />
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Image Source="ms-appx:///Assets/app.png" Width="20" Height="20" />
                 <TextBlock Text="Open Download Manager" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
             </StackPanel>
         </Grid>
@@ -26,10 +46,12 @@
         <NavigationView
             x:Name="Nav"
             Grid.Row="1"
-            PaneDisplayMode="Left"
+            PaneDisplayMode="Auto"
+            CompactModeThresholdWidth="700"
+            ExpandedModeThresholdWidth="1000"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="True"
-            OpenPaneLength="220"
+            OpenPaneLength="210"
             SelectionChanged="OnNavSelectionChanged">
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="All downloads" Tag="all" IsSelected="True">
@@ -62,58 +84,171 @@
                 </NavigationViewItem>
             </NavigationView.MenuItems>
 
-            <Grid Padding="24,8,24,12" RowSpacing="8">
+            <Grid x:Name="Body" Padding="16,4,16,8" RowSpacing="6" SizeChanged="OnBodySizeChanged">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <CommandBar HorizontalAlignment="Left" DefaultLabelPosition="Right" IsOpen="False">
-                    <AppBarButton Icon="Add" Label="Add" Click="OnAddClick">
-                        <AppBarButton.KeyboardAccelerators>
-                            <KeyboardAccelerator Modifiers="Control" Key="N" />
-                        </AppBarButton.KeyboardAccelerators>
-                    </AppBarButton>
-                    <AppBarSeparator />
-                    <AppBarButton Icon="Play" Label="Resume" Click="OnResumeClick" />
-                    <AppBarButton Icon="Pause" Label="Pause" Click="OnPauseClick" />
-                    <AppBarButton Icon="Delete" Label="Remove" Click="OnRemoveClick">
-                        <AppBarButton.KeyboardAccelerators>
-                            <KeyboardAccelerator Key="Delete" />
-                        </AppBarButton.KeyboardAccelerators>
-                    </AppBarButton>
-                    <AppBarSeparator />
-                    <AppBarButton Label="Resume all" Click="OnResumeAllClick">
-                        <AppBarButton.Icon><FontIcon Glyph="&#xE768;" /></AppBarButton.Icon>
-                    </AppBarButton>
-                    <AppBarButton Label="Pause all" Click="OnPauseAllClick">
-                        <AppBarButton.Icon><FontIcon Glyph="&#xE769;" /></AppBarButton.Icon>
-                    </AppBarButton>
-                    <CommandBar.SecondaryCommands>
-                        <AppBarButton Icon="Up" Label="Move up" Click="OnMoveUpClick" />
-                        <AppBarButton Icon="Download" Label="Move down" Click="OnMoveDownClick" />
-                        <AppBarButton Icon="Clear" Label="Clear finished" Click="OnClearCompletedClick" />
-                    </CommandBar.SecondaryCommands>
-                </CommandBar>
+                <!-- Toolbar: actions on the left, search and view options on the right. On narrow
+                     windows the right side moves to its own row (see OnContentSizeChanged). -->
+                <Grid x:Name="Toolbar" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <CommandBar x:Name="Actions" HorizontalAlignment="Left" DefaultLabelPosition="Right" Background="Transparent">
+                        <AppBarButton Icon="Add" Label="Add" Click="OnAddClick" ToolTipService.ToolTip="Add a download (Ctrl+N)">
+                            <AppBarButton.KeyboardAccelerators>
+                                <KeyboardAccelerator Modifiers="Control" Key="N" />
+                            </AppBarButton.KeyboardAccelerators>
+                        </AppBarButton>
+                        <AppBarSeparator />
+                        <AppBarButton Icon="Play" Label="Resume" Click="OnResumeClick" ToolTipService.ToolTip="Resume the checked downloads" />
+                        <AppBarButton Icon="Pause" Label="Pause" Click="OnPauseClick" ToolTipService.ToolTip="Pause the checked downloads" />
+                        <AppBarButton Icon="Delete" Label="Remove" Click="OnRemoveClick" ToolTipService.ToolTip="Remove the checked downloads from the list (Delete)">
+                            <AppBarButton.KeyboardAccelerators>
+                                <KeyboardAccelerator Key="Delete" />
+                            </AppBarButton.KeyboardAccelerators>
+                        </AppBarButton>
+                        <AppBarSeparator />
+                        <AppBarButton Label="Resume all" Click="OnResumeAllClick">
+                            <AppBarButton.Icon><FontIcon Glyph="&#xE768;" /></AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton Label="Pause all" Click="OnPauseAllClick">
+                            <AppBarButton.Icon><FontIcon Glyph="&#xE769;" /></AppBarButton.Icon>
+                        </AppBarButton>
+                        <CommandBar.SecondaryCommands>
+                            <AppBarButton Icon="Up" Label="Move up in queue" Click="OnMoveUpClick" />
+                            <AppBarButton Icon="Download" Label="Move down in queue" Click="OnMoveDownClick" />
+                            <AppBarButton Icon="Clear" Label="Clear finished" Click="OnClearCompletedClick" />
+                        </CommandBar.SecondaryCommands>
+                    </CommandBar>
 
-                <InfoBar x:Name="Info" Grid.Row="1" IsOpen="False" Severity="Error" IsClosable="True" />
+                    <StackPanel x:Name="Tools" Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <AutoSuggestBox x:Name="Search" PlaceholderText="Search downloads" Width="220" QueryIcon="Find"
+                                        TextChanged="OnSearchChanged" />
+                        <ComboBox x:Name="StatusBox" Width="140" SelectedIndex="0" SelectionChanged="OnStatusFilterChanged"
+                                  ToolTipService.ToolTip="Show only downloads in this state">
+                            <ComboBoxItem Content="Any status" Tag="any" />
+                            <ComboBoxItem Content="Downloading" Tag="downloading" />
+                            <ComboBoxItem Content="Queued" Tag="queued" />
+                            <ComboBoxItem Content="Paused" Tag="paused" />
+                            <ComboBoxItem Content="Finished" Tag="completed" />
+                            <ComboBoxItem Content="Failed" Tag="failed" />
+                        </ComboBox>
+                        <DropDownButton ToolTipService.ToolTip="Columns, density and theme">
+                            <DropDownButton.Content>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon Glyph="&#xE8FD;" FontSize="14" />
+                                    <TextBlock Text="View" />
+                                </StackPanel>
+                            </DropDownButton.Content>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout x:Name="ViewMenu" Placement="BottomEdgeAlignedRight" Opening="OnViewMenuOpening">
+                                    <MenuFlyoutSubItem Text="Columns">
+                                        <ToggleMenuFlyoutItem x:Name="ColSize" Text="Size" Click="OnColumnToggle" Tag="size" />
+                                        <ToggleMenuFlyoutItem x:Name="ColProgress" Text="Progress" Click="OnColumnToggle" Tag="progress" />
+                                        <ToggleMenuFlyoutItem x:Name="ColSpeed" Text="Speed" Click="OnColumnToggle" Tag="speed" />
+                                        <ToggleMenuFlyoutItem x:Name="ColTimeLeft" Text="Time left" Click="OnColumnToggle" Tag="timeLeft" />
+                                        <ToggleMenuFlyoutItem x:Name="ColStatus" Text="Status" Click="OnColumnToggle" Tag="status" />
+                                        <ToggleMenuFlyoutItem x:Name="ColAdded" Text="Date added" Click="OnColumnToggle" Tag="added" />
+                                    </MenuFlyoutSubItem>
+                                    <MenuFlyoutSubItem Text="Density">
+                                        <RadioMenuFlyoutItem x:Name="DensityCompact" Text="Compact" GroupName="density" Tag="compact" Click="OnDensityClick" />
+                                        <RadioMenuFlyoutItem x:Name="DensityStandard" Text="Standard" GroupName="density" Tag="standard" Click="OnDensityClick" />
+                                        <RadioMenuFlyoutItem x:Name="DensityComfortable" Text="Comfortable" GroupName="density" Tag="comfortable" Click="OnDensityClick" />
+                                    </MenuFlyoutSubItem>
+                                    <MenuFlyoutSubItem Text="Theme">
+                                        <RadioMenuFlyoutItem x:Name="ThemeSystem" Text="Use system setting" GroupName="theme" Tag="system" Click="OnThemeClick" />
+                                        <RadioMenuFlyoutItem x:Name="ThemeLight" Text="Light" GroupName="theme" Tag="light" Click="OnThemeClick" />
+                                        <RadioMenuFlyoutItem x:Name="ThemeDark" Text="Dark" GroupName="theme" Tag="dark" Click="OnThemeClick" />
+                                    </MenuFlyoutSubItem>
+                                    <MenuFlyoutSeparator />
+                                    <ToggleMenuFlyoutItem x:Name="ProgressWindows" Text="Open a progress window for each download" Click="OnProgressWindowsToggle" />
+                                </MenuFlyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                    </StackPanel>
+                </Grid>
+
+                <InfoBar x:Name="Info" Grid.Row="2" IsOpen="False" Severity="Error" IsClosable="True" />
+
+                <!-- Column headers, laid out like the rows below. -->
+                <Grid x:Name="Header" Grid.Row="3" Padding="14,0,12,0" ColumnSpacing="12" BorderThickness="0,0,0,1"
+                      BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="32" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <CheckBox x:Name="SelectAll" MinWidth="0" Padding="0" VerticalAlignment="Center" Click="OnSelectAllClick"
+                              ToolTipService.ToolTip="Check all" />
+                    <Button Grid.Column="1" Style="{StaticResource HeaderButton}" Tag="name" Click="OnSortClick">
+                        <TextBlock x:Name="HName" Text="Name" Margin="12,0,0,0" />
+                    </Button>
+                    <Button Grid.Column="2" Width="130" Style="{StaticResource HeaderButton}" Tag="size" Click="OnSortClick"
+                            Visibility="{x:Bind services:ViewSettings.Current.SizeColumn, Mode=OneWay}">
+                        <TextBlock x:Name="HSize" Text="Size" />
+                    </Button>
+                    <Button Grid.Column="3" Width="140" Style="{StaticResource HeaderButton}" Tag="progress" Click="OnSortClick"
+                            Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}">
+                        <TextBlock x:Name="HProgress" Text="Progress" />
+                    </Button>
+                    <Button Grid.Column="4" Width="90" Style="{StaticResource HeaderButton}" Tag="speed" Click="OnSortClick"
+                            Visibility="{x:Bind services:ViewSettings.Current.SpeedColumn, Mode=OneWay}">
+                        <TextBlock x:Name="HSpeed" Text="Speed" />
+                    </Button>
+                    <TextBlock Grid.Column="5" Width="80" Text="Time left" FontSize="12" VerticalAlignment="Center"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Visibility="{x:Bind services:ViewSettings.Current.TimeLeftColumn, Mode=OneWay}" />
+                    <Button Grid.Column="6" Width="120" Style="{StaticResource HeaderButton}" Tag="status" Click="OnSortClick"
+                            Visibility="{x:Bind services:ViewSettings.Current.StatusColumn, Mode=OneWay}">
+                        <TextBlock x:Name="HStatus" Text="Status" />
+                    </Button>
+                    <Button Grid.Column="7" Width="110" Style="{StaticResource HeaderButton}" Tag="added" Click="OnSortClick"
+                            Visibility="{x:Bind services:ViewSettings.Current.AddedColumn, Mode=OneWay}">
+                        <TextBlock x:Name="HAdded" Text="Added" />
+                    </Button>
+                </Grid>
 
                 <ListView
                     x:Name="List"
-                    Grid.Row="2"
+                    Grid.Row="4"
                     ItemsSource="{x:Bind ViewModel.Visible}"
-                    SelectionMode="Extended"
+                    SelectionMode="Multiple"
+                    IsMultiSelectCheckBoxEnabled="True"
                     IsDoubleTapEnabled="True"
-                    DoubleTapped="OnItemDoubleTapped">
+                    DoubleTapped="OnItemDoubleTapped"
+                    SelectionChanged="OnListSelectionChanged"
+                    SizeChanged="OnListSizeChanged">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+                            <Setter Property="MinHeight" Value="0" />
+                            <Setter Property="Padding" Value="12,0,12,0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="models:DownloadItem">
-                            <Grid Padding="4,10" ColumnSpacing="14">
+                            <Grid Height="{x:Bind services:ViewSettings.Current.RowHeight, Mode=OneWay}" ColumnSpacing="12"
+                                  Background="Transparent" ToolTipService.ToolTip="{x:Bind Detail, Mode=OneWay}">
                                 <Grid.ContextFlyout>
                                     <MenuFlyout>
                                         <MenuFlyoutItem Text="Open" Icon="OpenFile" Click="OnOpenClick" />
                                         <MenuFlyoutItem Text="Show in folder" Icon="Folder" Click="OnShowInFolderClick" />
+                                        <MenuFlyoutItem Text="Show progress window" Click="OnShowProgressClick">
+                                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE9D9;" /></MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
                                         <MenuFlyoutSeparator />
                                         <MenuFlyoutItem Text="Resume" Icon="Play" Click="OnItemResumeClick" />
                                         <MenuFlyoutItem Text="Pause" Icon="Pause" Click="OnItemPauseClick" />
@@ -128,40 +263,68 @@
                                     </MenuFlyout>
                                 </Grid.ContextFlyout>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="180" />
-                                    <ColumnDefinition Width="44" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <FontIcon Glyph="{x:Bind Glyph, Mode=OneWay}" FontSize="22" VerticalAlignment="Center" />
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="{x:Bind Detail, Mode=OneWay}" TextTrimming="CharacterEllipsis" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <FontIcon Glyph="{x:Bind Glyph, Mode=OneWay}" FontSize="{x:Bind services:ViewSettings.Current.IconSize, Mode=OneWay}"
+                                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                                 </StackPanel>
-                                <ProgressBar
-                                    Grid.Column="2"
-                                    VerticalAlignment="Center"
-                                    Maximum="100"
-                                    Value="{x:Bind Progress, Mode=OneWay}"
-                                    IsIndeterminate="{x:Bind IsIndeterminate, Mode=OneWay}"
-                                    ShowError="{x:Bind IsFailed, Mode=OneWay}"
-                                    Visibility="{x:Bind ShowProgress, Mode=OneWay}" />
-                                <TextBlock Grid.Column="3" Text="{x:Bind PercentText, Mode=OneWay}" VerticalAlignment="Center" HorizontalAlignment="Right" Style="{StaticResource CaptionTextBlockStyle}" />
+                                <TextBlock Margin="30,0,0,0" Text="{x:Bind DisplayName, Mode=OneWay}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" MaxLines="1"
+                                           FontSize="{x:Bind services:ViewSettings.Current.RowFontSize, Mode=OneWay}" />
+                                <TextBlock Grid.Column="1" Width="130" Style="{StaticResource Cell}" Text="{x:Bind SizeText, Mode=OneWay}"
+                                           Visibility="{x:Bind services:ViewSettings.Current.SizeColumn, Mode=OneWay}" />
+                                <Grid Grid.Column="2" Width="140" ColumnSpacing="8"
+                                      Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="38" />
+                                    </Grid.ColumnDefinitions>
+                                    <ProgressBar VerticalAlignment="Center" Maximum="100" Value="{x:Bind Progress, Mode=OneWay}"
+                                                 IsIndeterminate="{x:Bind IsIndeterminate, Mode=OneWay}" ShowError="{x:Bind IsFailed, Mode=OneWay}"
+                                                 ShowPaused="{x:Bind IsPaused, Mode=OneWay}" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource Cell}" HorizontalAlignment="Right" FontSize="12"
+                                               Text="{x:Bind ProgressPercent, Mode=OneWay}" />
+                                </Grid>
+                                <TextBlock Grid.Column="3" Width="90" Style="{StaticResource Cell}" Text="{x:Bind SpeedText, Mode=OneWay}"
+                                           Visibility="{x:Bind services:ViewSettings.Current.SpeedColumn, Mode=OneWay}" />
+                                <TextBlock Grid.Column="4" Width="80" Style="{StaticResource Cell}" Text="{x:Bind TimeLeftText, Mode=OneWay}"
+                                           Visibility="{x:Bind services:ViewSettings.Current.TimeLeftColumn, Mode=OneWay}" />
+                                <TextBlock Grid.Column="5" Width="120" Style="{StaticResource Cell}" Text="{x:Bind StatusText, Mode=OneWay}"
+                                           Foreground="{x:Bind StatusBrush, Mode=OneWay}"
+                                           Visibility="{x:Bind services:ViewSettings.Current.StatusColumn, Mode=OneWay}" />
+                                <TextBlock Grid.Column="6" Width="110" Style="{StaticResource Cell}" Text="{x:Bind AddedText, Mode=OneWay}"
+                                           Visibility="{x:Bind services:ViewSettings.Current.AddedColumn, Mode=OneWay}" />
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
 
-                <StackPanel Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8"
+                <StackPanel Grid.Row="4" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" IsHitTestVisible="False"
                             Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}">
                     <FontIcon Glyph="&#xE896;" FontSize="40" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                    <TextBlock Text="No downloads here yet" HorizontalAlignment="Center" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock Text="{x:Bind ViewModel.EmptyTitle, Mode=OneWay}" HorizontalAlignment="Center" Style="{StaticResource SubtitleTextBlockStyle}" />
                     <TextBlock Text="Click Add, paste a link, or download in Chrome or Edge with the extension installed."
-                               HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="420"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
 
-                <TextBlock Grid.Row="3" Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Grid Grid.Row="5" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}"
+                               TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="SelectionText" Grid.Column="1" Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
             </Grid>
         </NavigationView>
     </Grid>

@@ -23,6 +23,7 @@ public partial class App : Application
     private DispatcherQueue? _ui;
     private string _lastClipboard = "";
     private bool _exiting;
+    private readonly Dictionary<ulong, Views.DownloadWindow> _progressWindows = [];
 
     public AppSettings Settings { get; } = AppSettings.Load();
 
@@ -41,6 +42,7 @@ public partial class App : Application
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
         _ui = DispatcherQueue.GetForCurrentThread();
+        ViewSettings.Current.Load(Settings);
         Notifications.Invoked += a => _ui.TryEnqueue(() => OnNotification(a));
         Notifications.Register();
 
@@ -71,6 +73,10 @@ public partial class App : Application
         };
         _vm.QueueFinished += OnQueueFinished;
         _vm.NeedsConfirmation += ShowNewDownload;
+        _vm.Started += item =>
+        {
+            if (Settings.ShowProgressWindow) ShowProgressWindow(item);
+        };
         _vm.Load();
 
         _window = new MainWindow(_vm);
@@ -134,6 +140,19 @@ public partial class App : Application
         _core = null;
         _window?.Close();
         Environment.Exit(0);
+    }
+
+    /// <summary>Opens the download's progress window, or brings it back if it is already open.</summary>
+    public void ShowProgressWindow(Models.DownloadItem item)
+    {
+        if (_core is null) return;
+        if (!_progressWindows.TryGetValue(item.Id, out var window))
+        {
+            window = new Views.DownloadWindow(_core, item);
+            _progressWindows[item.Id] = window;
+            window.Closed += (_, _) => _progressWindows.Remove(item.Id);
+        }
+        window.ShowOnTop();
     }
 
     private void ShowNewDownload(Models.DownloadItem item)

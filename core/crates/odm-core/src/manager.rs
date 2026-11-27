@@ -119,6 +119,10 @@ pub enum Command {
         #[serde(default)]
         save_dir: Option<String>,
     },
+    /// The segment map for the progress window: `{ ok, total, segments: [{ start, cursor, end }] }`.
+    Details {
+        id: u64,
+    },
     /// The answer from the new-download window: start now, or keep it for later.
     Confirm {
         id: u64,
@@ -513,6 +517,25 @@ impl Actor {
                 json!({ "ok": true })
             }
             Command::Edit { id, file_name, save_dir } => self.edit(id, file_name, save_dir),
+            Command::Details { id } => {
+                let Some(e) = self.jobs.get(&id) else {
+                    return json!({ "ok": false, "error": "No such download" });
+                };
+                let segments = match &e.run {
+                    Some(run) => run.transfer.rows(),
+                    None => self.store.load_segments(id).unwrap_or_default(),
+                };
+                // An unknown end is u64::MAX; send the known total instead so the map stays drawable.
+                let total = e.rec.job.total_size;
+                let segments: Vec<Value> = segments
+                    .iter()
+                    .map(|s| {
+                        let end = if s.end == u64::MAX { total.unwrap_or(s.cursor) } else { s.end };
+                        json!({ "start": s.start, "cursor": s.cursor.min(end), "end": end })
+                    })
+                    .collect();
+                json!({ "ok": true, "total": total, "segments": segments, "job": e.rec.job })
+            }
             Command::Confirm { id, start } => {
                 let Some(e) = self.jobs.get_mut(&id) else {
                     return json!({ "ok": false, "error": "No such download" });

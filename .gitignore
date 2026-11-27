@@ -20,3 +20,6 @@ Thumbs.db
 
 # Bundled tools fetched by scripts/fetch-tools.ps1
 tools/
+
+# Rendered icon sizes (the committed copies live in Assets/ and extension/icons/)
+scripts/icon/out/

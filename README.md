@@ -54,6 +54,7 @@ extension/                    the browser extension (load this folder unpacked)
 native-host/PROTOCOL.md       the messages between the extension and the app
 scripts/fetch-tools.ps1       downloads yt-dlp, an LGPL ffmpeg and deno into tools/, checking hashes
 scripts/build.mjs             builds the Edge and Chrome extension packages
+scripts/icon/                 draws the app icon (Windows .ico, extension icons, macOS 1024 px)
 tests/                        extension unit tests and a Chromium end-to-end test
 ```
 

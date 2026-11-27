@@ -7,7 +7,7 @@ using OpenDownloadManager.Services;
 
 namespace OpenDownloadManager.ViewModels;
 
-/// <summary>The download list, kept in step with the core's events.</summary>
+/// <summary>The download list, kept in step with the core's events, filtered, searched and sorted.</summary>
 public sealed partial class MainViewModel : ObservableObject
 {
     private readonly Dictionary<ulong, DownloadItem> _items = [];
@@ -15,16 +15,27 @@ public sealed partial class MainViewModel : ObservableObject
     public CoreClient Core { get; }
     public AppSettings AppSettings { get; }
 
-    /// <summary>The items the current filter shows, in queue order.</summary>
+    /// <summary>The items the current filters show, in the current sort order.</summary>
     public ObservableCollection<DownloadItem> Visible { get; } = [];
 
+    /// <summary>The navigation pane's choice: all, active, completed, or a category.</summary>
     [ObservableProperty] public partial string Filter { get; set; } = "all";
+    /// <summary>any, downloading, queued, paused, completed or failed.</summary>
+    [ObservableProperty] public partial string StatusFilter { get; set; } = "any";
+    [ObservableProperty] public partial string SearchText { get; set; } = "";
+    /// <summary>queue, name, size, progress, speed, status or added.</summary>
+    [ObservableProperty] public partial string SortBy { get; set; } = "queue";
+    [ObservableProperty] public partial bool SortDescending { get; set; }
+
     [ObservableProperty] public partial string StatusText { get; set; } = "";
     [ObservableProperty] public partial bool IsEmpty { get; set; } = true;
+    [ObservableProperty] public partial string EmptyTitle { get; set; } = "No downloads here yet";
     [ObservableProperty] public partial string? ErrorText { get; set; }
 
     public event Action<DownloadItem>? Completed;
     public event Action<DownloadItem>? Failed;
+    /// <summary>A download began connecting (from queued or paused).</summary>
+    public event Action<DownloadItem>? Started;
     public event Action<string>? QueueFinished;
     /// <summary>A browser download waits for the new-download window.</summary>
     public event Action<DownloadItem>? NeedsConfirmation;
@@ -36,6 +47,8 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Core = core;
         AppSettings = appSettings;
+        SortBy = appSettings.SortBy;
+        SortDescending = appSettings.SortDescending;
         Core.EventReceived += OnEvent;
     }
 
@@ -58,6 +71,30 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     partial void OnFilterChanged(string value) => Refilter();
+    partial void OnStatusFilterChanged(string value) => Refilter();
+    partial void OnSearchTextChanged(string value) => Refilter();
+    partial void OnSortByChanged(string value) => SaveSort();
+    partial void OnSortDescendingChanged(bool value) => SaveSort();
+
+    /// <summary>Sorts by a column; the same column again flips the direction.</summary>
+    public void SortOn(string column)
+    {
+        if (SortBy == column) SortDescending = !SortDescending;
+        else
+        {
+            SortBy = column;
+            // Sizes, progress, speed and dates read best largest or newest first.
+            SortDescending = column is "size" or "progress" or "speed" or "added";
+        }
+    }
+
+    private void SaveSort()
+    {
+        AppSettings.SortBy = SortBy;
+        AppSettings.SortDescending = SortDescending;
+        try { AppSettings.Save(); } catch { }
+        Refilter();
+    }
 
     private void OnEvent(JsonObject ev)
     {
@@ -81,9 +118,13 @@ public sealed partial class MainViewModel : ObservableObject
                         Place(item);
                         break;
                     }
-                    var (wasState, wasPosition) = (item.State, item.Position);
+                    var (wasState, wasPosition, wasName) = (item.State, item.Position, item.DisplayName);
                     item.Update(job);
-                    if (wasPosition != item.Position || Matches(item) != Visible.Contains(item)) Place(item);
+                    // Only changes that move a row re-place it, so rows don't jump on every progress tick.
+                    if (wasPosition != item.Position || wasState != item.State || wasName != item.DisplayName
+                        || Matches(item) != Visible.Contains(item))
+                        Place(item);
+                    if (wasState is "queued" or "paused" && item.State == "connecting") Started?.Invoke(item);
                     if (wasState != "completed" && item.State == "completed") Completed?.Invoke(item);
                     if (wasState != "failed" && item.State == "failed") Failed?.Invoke(item);
                     break;
@@ -107,41 +148,85 @@ public sealed partial class MainViewModel : ObservableObject
         UpdateStatus();
     }
 
-    private bool Matches(DownloadItem item) => Filter switch
+    private bool Matches(DownloadItem item)
     {
-        "all" => true,
-        "active" => !item.IsCompleted,
-        "completed" => item.IsCompleted,
-        _ => item.Category == Filter,
-    };
+        var nav = Filter switch
+        {
+            "all" => true,
+            "active" => !item.IsCompleted,
+            "completed" => item.IsCompleted,
+            _ => item.Category == Filter,
+        };
+        if (!nav) return false;
+        var status = StatusFilter switch
+        {
+            "downloading" => item.IsActive,
+            "queued" => item.State == "queued",
+            "paused" => item.State == "paused",
+            "completed" => item.IsCompleted,
+            "failed" => item.IsFailed,
+            _ => true,
+        };
+        if (!status) return false;
+        var q = SearchText.Trim();
+        return q.Length == 0
+            || item.DisplayName.Contains(q, StringComparison.CurrentCultureIgnoreCase)
+            || item.Url.Contains(q, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private int Compare(DownloadItem a, DownloadItem b)
+    {
+        var c = SortBy switch
+        {
+            "name" => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase),
+            "size" => (a.TotalSize ?? a.Downloaded).CompareTo(b.TotalSize ?? b.Downloaded),
+            "progress" => a.Progress.CompareTo(b.Progress),
+            "speed" => a.Speed.CompareTo(b.Speed),
+            "status" => string.Compare(a.StatusText, b.StatusText, StringComparison.CurrentCulture),
+            "added" => a.CreatedAt.CompareTo(b.CreatedAt),
+            _ => a.Position.CompareTo(b.Position),
+        };
+        if (SortDescending) c = -c;
+        return c != 0 ? c : a.Position.CompareTo(b.Position);
+    }
 
     private void Refilter()
     {
+        var keep = _items.Values.Where(Matches).ToList();
+        keep.Sort(Compare);
         Visible.Clear();
-        foreach (var item in _items.Values.Where(Matches).OrderBy(i => i.Position))
-            Visible.Add(item);
+        foreach (var item in keep) Visible.Add(item);
         UpdateStatus();
     }
 
     /// <summary>Puts one item where it belongs in the visible list, or takes it out.</summary>
     private void Place(DownloadItem item)
     {
-        Visible.Remove(item);
-        if (!Matches(item)) return;
+        var at = Visible.IndexOf(item);
+        if (!Matches(item))
+        {
+            if (at >= 0) Visible.RemoveAt(at);
+            return;
+        }
         var index = 0;
-        while (index < Visible.Count && Visible[index].Position < item.Position) index++;
-        Visible.Insert(index, item);
+        while (index < Visible.Count && (Visible[index] == item || Compare(Visible[index], item) <= 0)) index++;
+        if (at >= 0 && index > at) index--;
+        if (at == index) return;
+        if (at >= 0) Visible.Move(at, index);
+        else Visible.Insert(index, item);
     }
 
     private void UpdateStatus()
     {
         IsEmpty = Visible.Count == 0;
+        EmptyTitle = _items.Count == 0 ? "No downloads here yet" : "Nothing matches these filters";
         var active = _items.Values.Where(i => i.IsActive).ToList();
         var queued = _items.Values.Count(i => i.State == "queued");
         var speed = active.Sum(i => i.Speed);
-        StatusText = active.Count == 0
-            ? queued > 0 ? $"{queued} queued" : "No downloads running"
-            : $"{active.Count} downloading · {Format.Speed(speed)}" + (queued > 0 ? $" · {queued} queued" : "");
+        var shown = Visible.Count == _items.Count ? $"{_items.Count} downloads" : $"{Visible.Count} of {_items.Count} shown";
+        StatusText = shown + " · " + (active.Count == 0
+            ? queued > 0 ? $"{queued} queued" : "nothing running"
+            : $"{active.Count} downloading at {Format.Speed(speed)}" + (queued > 0 ? $", {queued} queued" : ""));
         App.Current?.UpdateTrayTooltip(active.Count == 0
             ? AppPaths.AppName
             : $"{AppPaths.AppName}\n{active.Count} downloading · {Format.Speed(speed)}");

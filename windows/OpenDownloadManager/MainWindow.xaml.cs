@@ -35,7 +35,137 @@ public sealed partial class MainWindow : Window
         {
             if (e.PropertyName == nameof(MainViewModel.ErrorText) && ViewModel.ErrorText is { } message)
                 ShowError(message);
+            if (e.PropertyName is nameof(MainViewModel.SortBy) or nameof(MainViewModel.SortDescending))
+                ShowSortArrows();
         };
+        ViewSettings.Current.Track(this);
+        ShowSortArrows();
+    }
+
+    // ----- search, filters, view options -----
+
+    private void OnSearchChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args) =>
+        ViewModel.SearchText = sender.Text;
+
+    private void OnStatusFilterChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (StatusBox.SelectedItem is ComboBoxItem { Tag: string tag }) ViewModel.StatusFilter = tag;
+    }
+
+    private void OnSortClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string column }) ViewModel.SortOn(column);
+    }
+
+    /// <summary>An arrow on the sorted column's header.</summary>
+    private void ShowSortArrows()
+    {
+        var arrow = ViewModel.SortDescending ? "  \u2193" : "  \u2191";
+        void Set(TextBlock t, string label, string key) => t.Text = ViewModel.SortBy == key ? label + arrow : label;
+        Set(HName, "Name", "name");
+        Set(HSize, "Size", "size");
+        Set(HProgress, "Progress", "progress");
+        Set(HSpeed, "Speed", "speed");
+        Set(HStatus, "Status", "status");
+        Set(HAdded, "Added", "added");
+    }
+
+    private void OnViewMenuOpening(object? sender, object e)
+    {
+        var v = ViewSettings.Current;
+        ColSize.IsChecked = v.ShowSize;
+        ColProgress.IsChecked = v.ShowProgress;
+        ColSpeed.IsChecked = v.ShowSpeed;
+        ColTimeLeft.IsChecked = v.ShowTimeLeft;
+        ColStatus.IsChecked = v.ShowStatus;
+        ColAdded.IsChecked = v.ShowAdded;
+        DensityCompact.IsChecked = v.Density == "compact";
+        DensityStandard.IsChecked = v.Density == "standard";
+        DensityComfortable.IsChecked = v.Density == "comfortable";
+        ThemeSystem.IsChecked = v.Theme == "system";
+        ThemeLight.IsChecked = v.Theme == "light";
+        ThemeDark.IsChecked = v.Theme == "dark";
+        ProgressWindows.IsChecked = ViewModel.AppSettings.ShowProgressWindow;
+    }
+
+    private void OnColumnToggle(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleMenuFlyoutItem { Tag: string column } item) return;
+        var v = ViewSettings.Current;
+        switch (column)
+        {
+            case "size": v.ShowSize = item.IsChecked; break;
+            case "progress": v.ShowProgress = item.IsChecked; break;
+            case "speed": v.ShowSpeed = item.IsChecked; break;
+            case "timeLeft": v.ShowTimeLeft = item.IsChecked; break;
+            case "status": v.ShowStatus = item.IsChecked; break;
+            case "added": v.ShowAdded = item.IsChecked; break;
+        }
+    }
+
+    private void OnDensityClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string density }) ViewSettings.Current.Density = density;
+    }
+
+    private void OnThemeClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string theme }) ViewSettings.Current.Theme = theme;
+    }
+
+    private void OnProgressWindowsToggle(object sender, RoutedEventArgs e)
+    {
+        ViewModel.AppSettings.ShowProgressWindow = ProgressWindows.IsChecked;
+        try { ViewModel.AppSettings.Save(); } catch { }
+    }
+
+    // ----- selection -----
+
+    private void OnSelectAllClick(object sender, RoutedEventArgs e)
+    {
+        if (SelectAll.IsChecked == true) List.SelectAll();
+        else List.SelectedItems.Clear();
+    }
+
+    private void OnListSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var n = List.SelectedItems.Count;
+        SelectionText.Text = n == 0 ? "" : n == 1 ? "1 checked" : $"{n} checked";
+        SelectAll.IsChecked = n == 0 ? false : n == ViewModel.Visible.Count ? true : null;
+    }
+
+    // ----- responsive layout -----
+
+    /// <summary>Narrow windows put search and view options on their own row.</summary>
+    private void OnBodySizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var narrow = e.NewSize.Width < 860;
+        Grid.SetRow(Tools, narrow ? 1 : 0);
+        Grid.SetColumn(Tools, narrow ? 0 : 1);
+        Grid.SetColumnSpan(Tools, narrow ? 2 : 1);
+        Tools.HorizontalAlignment = narrow ? HorizontalAlignment.Stretch : HorizontalAlignment.Right;
+        Search.Width = narrow ? Math.Max(140, e.NewSize.Width - 340) : 220;
+        if (Tools.Parent != Body && narrow)
+        {
+            ((Panel)Tools.Parent).Children.Remove(Tools);
+            Body.Children.Add(Tools);
+        }
+        else if (Tools.Parent == Body && !narrow)
+        {
+            Body.Children.Remove(Tools);
+            Toolbar.Children.Add(Tools);
+        }
+    }
+
+    /// <summary>The list's width decides which columns fit.</summary>
+    private void OnListSizeChanged(object sender, SizeChangedEventArgs e) =>
+        ViewSettings.Current.SetListWidth(e.NewSize.Width);
+
+    // ----- progress windows -----
+
+    private void OnShowProgressClick(object sender, RoutedEventArgs e)
+    {
+        if (ItemOf(sender) is { } item) App.Current?.ShowProgressWindow(item);
     }
 
     public void ShowError(string message) => ShowInfo(message, InfoBarSeverity.Error);
@@ -168,10 +298,12 @@ public sealed partial class MainWindow : Window
 
     private async void OnClearCompletedClick(object sender, RoutedEventArgs e) => await Call(new { type = "clearCompleted" });
 
+    /// <summary>A finished download opens its file; any other opens its progress window.</summary>
     private void OnItemDoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
     {
-        if ((e.OriginalSource as FrameworkElement)?.DataContext is DownloadItem { IsCompleted: true, FilePath: { } path })
-            Shell.Open(path);
+        if ((e.OriginalSource as FrameworkElement)?.DataContext is not DownloadItem item) return;
+        if (item is { IsCompleted: true, FilePath: { } path }) Shell.Open(path);
+        else App.Current?.ShowProgressWindow(item);
     }
 
     private void OnOpenClick(object sender, RoutedEventArgs e)
