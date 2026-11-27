@@ -40,16 +40,63 @@ fn command(program: &Path) -> Command {
     cmd
 }
 
-fn request_args(ctx: &RequestContext) -> Vec<String> {
-    let mut args = Vec::new();
-    if let Some(ua) = ctx.user_agent.as_deref().filter(|s| !s.is_empty()) {
-        args.extend(["--user-agent".into(), ua.into()]);
+/// Which of the browser's request details yt-dlp is given.
+///
+/// Video pages go without the browser's cookies and user agent first: yt-dlp picks its own
+/// clients per site, and on YouTube a signed-in cookie switches it to clients that return no
+/// formats ("Requested format is not available"). Only when the site asks for a login does the
+/// page get a second try with the cookies. Stream addresses (HLS, DASH) always get them, since
+/// their servers may check them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Identity {
+    Anonymous,
+    Browser,
+}
+
+impl Identity {
+    fn first_for(kind: Option<MediaKind>) -> Self {
+        match kind {
+            Some(MediaKind::Hls | MediaKind::Dash) => Self::Browser,
+            _ => Self::Anonymous,
+        }
     }
+}
+
+/// Whether yt-dlp's error says the page needs the user's login.
+pub fn needs_login(error: &str) -> bool {
+    let e = error.to_lowercase();
+    [
+        "sign in",
+        "log in",
+        "login",
+        "private video",
+        "members",
+        "age-restricted",
+        "confirm your age",
+        "not a bot",
+        "cookies",
+        "authentication",
+    ]
+    .iter()
+    .any(|k| e.contains(k))
+}
+
+fn has_cookies(ctx: &RequestContext) -> bool {
+    ctx.cookies.as_deref().is_some_and(|c| !c.is_empty())
+}
+
+fn request_args(ctx: &RequestContext, identity: Identity) -> Vec<String> {
+    let mut args = Vec::new();
     if let Some(r) = ctx.referrer.as_deref().filter(|s| !s.is_empty()) {
         args.extend(["--referer".into(), r.into()]);
     }
-    if let Some(c) = ctx.cookies.as_deref().filter(|s| !s.is_empty()) {
-        args.extend(["--add-headers".into(), format!("Cookie:{c}")]);
+    if identity == Identity::Browser {
+        if let Some(ua) = ctx.user_agent.as_deref().filter(|s| !s.is_empty()) {
+            args.extend(["--user-agent".into(), ua.into()]);
+        }
+        if let Some(c) = ctx.cookies.as_deref().filter(|s| !s.is_empty()) {
+            args.extend(["--add-headers".into(), format!("Cookie:{c}")]);
+        }
     }
     args
 }
@@ -62,13 +109,27 @@ pub struct ProbeResult {
 
 /// Lists the qualities for a video page, best first.
 pub async fn probe(tools_dir: &Path, url: &str, ctx: &RequestContext) -> Result<ProbeResult, String> {
+    match probe_as(tools_dir, url, ctx, Identity::Anonymous).await {
+        Err(e) if needs_login(&e) && has_cookies(ctx) => {
+            probe_as(tools_dir, url, ctx, Identity::Browser).await
+        }
+        other => other,
+    }
+}
+
+async fn probe_as(
+    tools_dir: &Path,
+    url: &str,
+    ctx: &RequestContext,
+    identity: Identity,
+) -> Result<ProbeResult, String> {
     let ytdlp = tool_path(tools_dir, "yt-dlp");
     if !ytdlp.exists() {
         return Err(format!("yt-dlp is missing from {}", tools_dir.display()));
     }
     let mut cmd = command(&ytdlp);
     cmd.args(["-J", "--no-playlist", "--no-warnings", "--encoding", "utf-8"])
-        .args(request_args(ctx))
+        .args(request_args(ctx, identity))
         .arg("--")
         .arg(url)
         .stdout(Stdio::piped())
@@ -110,6 +171,16 @@ fn direct(f: &Value) -> bool {
     f["protocol"].as_str().is_none_or(|p| p == "https" || p == "http")
 }
 
+/// The number in "1080p", named the way video sites name it: the frame a 16:9 video of that
+/// quality would fill. 1920x1080 and 1080x1920 are 1080p, 3840x1920 is 2160p, 1440x1080 is 1080p.
+fn quality(f: &Value) -> u64 {
+    let h = f["height"].as_u64().unwrap_or(0);
+    match f["width"].as_u64() {
+        Some(w) if w > 0 => w.min(h).max(w.max(h) * 9 / 16),
+        _ => h,
+    }
+}
+
 fn has(f: &Value, codec: &str) -> bool {
     f[codec].as_str().is_some_and(|c| c != "none")
 }
@@ -127,7 +198,7 @@ pub fn build_menu(info: &Value) -> Vec<Format> {
 
     let mut by_height: Vec<(u64, &Value)> = Vec::new();
     for f in formats.iter().filter(|f| has(f, "vcodec") && f["height"].as_u64().is_some_and(|h| h > 0)) {
-        let h = f["height"].as_u64().unwrap_or(0);
+        let h = quality(f);
         let better = |old: &Value| {
             let key = |f: &Value| (direct(f), f["fps"].as_f64().unwrap_or(0.0), f["ext"] == "mp4", tbr(f));
             key(f).partial_cmp(&key(old)) == Some(std::cmp::Ordering::Greater)
@@ -195,7 +266,7 @@ pub struct VideoJob {
 }
 
 /// The arguments for a download; the URL goes last, after `--`.
-pub fn download_args(job: &VideoJob) -> Vec<String> {
+pub fn download_args(job: &VideoJob, identity: Identity) -> Vec<String> {
     let mut args: Vec<String> = [
         "--newline",
         "--no-playlist",
@@ -233,7 +304,7 @@ pub fn download_args(job: &VideoJob) -> Vec<String> {
     if job.speed_limit > 0 {
         args.extend(["--limit-rate".into(), job.speed_limit.to_string()]);
     }
-    args.extend(request_args(&job.request));
+    args.extend(request_args(&job.request, identity));
     args.push("--".into());
     args.push(job.url.clone());
     args
@@ -251,6 +322,25 @@ fn parse_progress(line: &str) -> Option<(u64, Option<u64>)> {
 
 /// Runs yt-dlp until the file is saved, it fails, or `cancel` fires.
 pub async fn run(job: VideoJob, transfer: Arc<Transfer>, cancel: CancellationToken) -> Outcome {
+    let first = Identity::first_for(job.media_kind);
+    match run_as(&job, &transfer, &cancel, first).await {
+        Outcome::Failed { error, .. }
+            if first == Identity::Anonymous && needs_login(&error) && has_cookies(&job.request) =>
+        {
+            transfer.external_downloaded.store(0, Ordering::Relaxed);
+            transfer.external_total.store(0, Ordering::Relaxed);
+            run_as(&job, &transfer, &cancel, Identity::Browser).await
+        }
+        other => other,
+    }
+}
+
+async fn run_as(
+    job: &VideoJob,
+    transfer: &Transfer,
+    cancel: &CancellationToken,
+    identity: Identity,
+) -> Outcome {
     let ytdlp = tool_path(&job.tools_dir, "yt-dlp");
     if !ytdlp.exists() {
         return Outcome::Failed {
@@ -262,7 +352,7 @@ pub async fn run(job: VideoJob, transfer: Arc<Transfer>, cancel: CancellationTok
         return Outcome::Failed { error: format!("Cannot create folder: {e}"), link_expired: false };
     }
     let mut cmd = command(&ytdlp);
-    cmd.args(download_args(&job)).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.args(download_args(job, identity)).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => return Outcome::Failed { error: format!("Cannot start yt-dlp: {e}"), link_expired: false },
@@ -388,6 +478,18 @@ mod tests {
     }
 
     #[test]
+    fn qualities_are_named_like_sites_name_them() {
+        let info = json!({ "formats": [
+            { "format_id": "137", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "width": 1080, "height": 1920, "fps": 30 },
+            { "format_id": "136", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "width": 720, "height": 1280, "fps": 30 },
+            { "format_id": "401", "ext": "mp4", "vcodec": "av01", "acodec": "none", "width": 3840, "height": 1920, "fps": 30 },
+            { "format_id": "135", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "width": 640, "height": 480, "fps": 30 }
+        ]});
+        let labels: Vec<String> = build_menu(&info).into_iter().map(|f| f.label).collect();
+        assert_eq!(labels, ["2160p", "1080p", "720p", "480p"]);
+    }
+
+    #[test]
     fn high_frame_rates_show_in_the_label() {
         let info = json!({ "formats": [
             { "format_id": "299", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "height": 1080, "fps": 60 }
@@ -414,10 +516,22 @@ mod tests {
             tools_dir: "tools".into(),
             speed_limit: 0,
         };
-        let args = download_args(&job);
+        let args = download_args(&job, Identity::Browser);
         assert_eq!(&args[args.len() - 2..], ["--", "--exec=calc"]);
         assert!(args.windows(2).any(|w| w == ["--audio-format", "mp3"]));
         assert!(args.windows(2).any(|w| w == ["--add-headers", "Cookie:a=b"]));
+
+        let anonymous = download_args(&job, Identity::Anonymous);
+        assert!(!anonymous.iter().any(|a| a.starts_with("Cookie:") || a == "--user-agent"));
+    }
+
+    #[test]
+    fn pages_go_without_cookies_first_and_streams_with_them() {
+        assert_eq!(Identity::first_for(Some(MediaKind::Page)), Identity::Anonymous);
+        assert_eq!(Identity::first_for(Some(MediaKind::Hls)), Identity::Browser);
+        assert!(needs_login("[youtube] x: Sign in to confirm you're not a bot. Use --cookies-from-browser"));
+        assert!(needs_login("[youtube] x: Private video. Sign in if you've been granted access"));
+        assert!(!needs_login("[youtube] x: Requested format is not available"));
     }
 
     #[test]

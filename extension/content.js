@@ -124,7 +124,10 @@
     if (!r?.ok || !r.formats?.length) {
       // Older app or probe failed: offer the best quality only.
       if (!r?.url) { closeMenu(); return flash('Could not send', r?.error || ''); }
-      menu.replaceChildren(menuRow('Best quality', '', () => sendItem({ kind: 'page', url: r.url })));
+      const best = menuRow('Best quality', '', () => sendItem({ kind: 'page', url: r.url }));
+      const why = r?.error ? `Could not list the qualities: ${r.error}` : 'Could not list the qualities';
+      const note = Object.assign(document.createElement('div'), { className: 'odm-note', textContent: why, title: why });
+      menu.replaceChildren(note, best);
       return;
     }
     const rows = r.formats.map((f) => menuRow(f.label || f.id, [f.ext, formatSize(f.size)].filter(Boolean).join(' · '),

@@ -527,7 +527,7 @@ impl Actor {
                 let folder =
                     if spec.format_id.as_deref() == Some(video::MP3_FORMAT) { "Music" } else { "Video" };
                 let dir = if self.settings.category_folders { base.join(folder) } else { base };
-                (spec.title.clone().unwrap_or_else(|| "Video".into()), dir)
+                (spec.title.as_deref().map(clean_title).unwrap_or_else(|| "Video".into()), dir)
             }
             JobKind::Http => {
                 let name = spec
@@ -548,7 +548,7 @@ impl Actor {
             kind,
             url,
             page_url: spec.referrer.clone(),
-            title: spec.title,
+            title: spec.title.as_deref().map(clean_title),
             file_name,
             save_dir: save_dir.to_string_lossy().into_owned(),
             total_size: spec.size,
@@ -934,6 +934,25 @@ impl Actor {
     }
 }
 
+/// A browser tab title without the unread count YouTube and others put in front ("(309) ") or
+/// the site name at the end (" - YouTube").
+fn clean_title(title: &str) -> String {
+    let mut t = title.trim();
+    if let Some(rest) = t.strip_prefix('(')
+        && let Some((count, after)) = rest.split_once(") ")
+        && !count.is_empty()
+        && count.chars().all(|c| c.is_ascii_digit() || c == '+')
+    {
+        t = after;
+    }
+    for site in [" - YouTube", " | YouTube", " - Vimeo", " on Vimeo", " | TikTok", " - Twitch"] {
+        if let Some(rest) = t.strip_suffix(site) {
+            t = rest;
+        }
+    }
+    t.trim().to_string()
+}
+
 /// Removes the `.part` file, and the finished file when asked.
 fn delete_files(rec: &JobRecord, delete_file: bool) {
     let job = &rec.job;
@@ -942,5 +961,18 @@ fn delete_files(rec: &JobRecord, delete_file: bool) {
     }
     if delete_file && let Some(path) = &job.file_path {
         let _ = std::fs::remove_file(path);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clean_title;
+
+    #[test]
+    fn tab_titles_lose_counts_and_site_names() {
+        assert_eq!(clean_title("(309) Welcome to the Studio - YouTube"), "Welcome to the Studio");
+        assert_eq!(clean_title("(99+) Clip | TikTok"), "Clip");
+        assert_eq!(clean_title("(Live) Concert"), "(Live) Concert");
+        assert_eq!(clean_title("Plain title"), "Plain title");
     }
 }
