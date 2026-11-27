@@ -52,7 +52,7 @@ core/                         the Rust core, shared with a later macOS app
 windows/OpenDownloadManager/  the WinUI 3 app (C#)
 extension/                    the browser extension (load this folder unpacked)
 native-host/PROTOCOL.md       the messages between the extension and the app
-scripts/fetch-tools.ps1       downloads yt-dlp and an LGPL ffmpeg into tools/, checking hashes
+scripts/fetch-tools.ps1       downloads yt-dlp, an LGPL ffmpeg and deno into tools/, checking hashes
 scripts/build.mjs             builds the Edge and Chrome extension packages
 tests/                        extension unit tests and a Chromium end-to-end test
 ```
@@ -109,4 +109,5 @@ generate; please do not add links to copyrighted videos.
 ## License
 
 GNU General Public License v3.0. See [LICENSE](LICENSE). yt-dlp is public domain (Unlicense);
-the bundled ffmpeg is an LGPL build and runs as a separate program.
+the bundled ffmpeg is an LGPL build and runs as a separate program; deno (MIT) is the
+JavaScript runtime yt-dlp uses for YouTube.

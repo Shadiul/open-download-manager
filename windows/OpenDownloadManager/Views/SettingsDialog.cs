@@ -129,7 +129,7 @@ public sealed class SettingsDialog : ContentDialog
         _notifications.IsOn = _app.Notifications;
         ShowHostStatus();
         _toolsStatus.Text = File.Exists(Path.Combine(AppPaths.ToolsDir, "yt-dlp.exe"))
-            ? "yt-dlp and ffmpeg are installed for video downloads."
+            ? "yt-dlp, ffmpeg and deno are installed for video downloads."
             : "yt-dlp is missing, so video pages cannot be downloaded. Run scripts\\fetch-tools.ps1 when building from source.";
     }
 

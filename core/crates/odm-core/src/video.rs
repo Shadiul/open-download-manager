@@ -81,6 +81,13 @@ pub fn needs_login(error: &str) -> bool {
     .any(|k| e.contains(k))
 }
 
+/// Points yt-dlp at the bundled JavaScript runtime (deno), which YouTube extraction needs for
+/// all formats and for signed-in requests. Without it yt-dlp falls back to fewer formats.
+fn runtime_args(tools_dir: &Path) -> Vec<String> {
+    let deno = tool_path(tools_dir, "deno");
+    if deno.exists() { vec!["--js-runtimes".into(), format!("deno:{}", deno.display())] } else { Vec::new() }
+}
+
 fn has_cookies(ctx: &RequestContext) -> bool {
     ctx.cookies.as_deref().is_some_and(|c| !c.is_empty())
 }
@@ -129,6 +136,7 @@ async fn probe_as(
     }
     let mut cmd = command(&ytdlp);
     cmd.args(["-J", "--no-playlist", "--no-warnings", "--encoding", "utf-8"])
+        .args(runtime_args(tools_dir))
         .args(request_args(ctx, identity))
         .arg("--")
         .arg(url)
@@ -304,6 +312,7 @@ pub fn download_args(job: &VideoJob, identity: Identity) -> Vec<String> {
     if job.speed_limit > 0 {
         args.extend(["--limit-rate".into(), job.speed_limit.to_string()]);
     }
+    args.extend(runtime_args(&job.tools_dir));
     args.extend(request_args(&job.request, identity));
     args.push("--".into());
     args.push(job.url.clone());
@@ -520,6 +529,15 @@ mod tests {
         assert_eq!(&args[args.len() - 2..], ["--", "--exec=calc"]);
         assert!(args.windows(2).any(|w| w == ["--audio-format", "mp3"]));
         assert!(args.windows(2).any(|w| w == ["--add-headers", "Cookie:a=b"]));
+
+        assert!(!args.iter().any(|a| a == "--js-runtimes"), "no deno in this tools folder");
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(tool_path(dir.path(), "deno"), b"").unwrap();
+        let with_deno = download_args(
+            &VideoJob { tools_dir: dir.path().to_path_buf(), ..job.clone() },
+            Identity::Browser,
+        );
+        assert!(with_deno.windows(2).any(|w| w[0] == "--js-runtimes" && w[1].starts_with("deno:")));
 
         let anonymous = download_args(&job, Identity::Anonymous);
         assert!(!anonymous.iter().any(|a| a.starts_with("Cookie:") || a == "--user-agent"));
