@@ -596,12 +596,21 @@ public sealed class DownloadWindow : Window
         if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } p) p.Restore();
         Activate();
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        // Once the double-click's mouse input has finished, so the list cannot take focus back.
+        // A window that is still being created needs a second, later nudge.
+        foreach (var delay in new[] { 150, 450 })
         {
-            AppWindow.MoveInZOrderAtTop();
-            SetForegroundWindow(hwnd);
-            Activate();
-        });
+            var later = DispatcherQueue.CreateTimer();
+            later.Interval = TimeSpan.FromMilliseconds(delay);
+            later.IsRepeating = false;
+            later.Tick += (_, _) =>
+            {
+                AppWindow.MoveInZOrderAtTop();
+                SetForegroundWindow(hwnd);
+                Activate();
+            };
+            later.Start();
+        }
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]

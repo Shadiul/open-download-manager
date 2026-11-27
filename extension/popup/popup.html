@@ -6,29 +6,29 @@
 </head>
 <body>
   <header>
-    <img src="../icons/32.png" alt="" width="22" height="22">
-    <strong>Open Download Manager</strong>
-    <span id="host" class="pill">Checking…</span>
-    <button id="options" class="icon-btn" title="All settings" aria-label="All settings">
-      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 6.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0 5.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm7.1-3.2-1.5-.3a5.7 5.7 0 0 0-.5-1.2l.9-1.3a.8.8 0 0 0-.1-1l-1-1a.8.8 0 0 0-1-.1l-1.3.9a5.7 5.7 0 0 0-1.2-.5l-.3-1.5a.8.8 0 0 0-.8-.6h-1.4a.8.8 0 0 0-.8.6l-.3 1.5c-.4.1-.8.3-1.2.5l-1.3-.9a.8.8 0 0 0-1 .1l-1 1a.8.8 0 0 0-.1 1l.9 1.3c-.2.4-.4.8-.5 1.2l-1.5.3a.8.8 0 0 0-.6.8v1.4c0 .4.3.7.6.8l1.5.3c.1.4.3.8.5 1.2l-.9 1.3a.8.8 0 0 0 .1 1l1 1c.3.3.7.3 1 .1l1.3-.9c.4.2.8.4 1.2.5l.3 1.5c.1.4.4.6.8.6h1.4c.4 0 .7-.3.8-.6l.3-1.5c.4-.1.8-.3 1.2-.5l1.3.9c.3.2.7.2 1-.1l1-1c.3-.3.3-.7.1-1l-.9-1.3c.2-.4.4-.8.5-1.2l1.5-.3c.4-.1.6-.4.6-.8V9.6a.8.8 0 0 0-.6-.8Z"/></svg>
+    <img src="../icons/32.png" alt="" width="20" height="20">
+    <h1>Open Download Manager</h1>
+    <span id="host" class="status" title="">Checking…</span>
+    <button id="options" class="icon-button" title="Settings" aria-label="Settings">
+      <svg viewBox="0 -960 960 960" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm112-260q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Z"/></svg>
     </button>
   </header>
 
   <main>
-    <div class="section-title"><span>On this page</span><span id="count" class="count"></span></div>
-    <ul id="cards"></ul>
+    <div class="section"><span>Videos on this page</span><span id="count"></span></div>
+    <ul id="cards" role="list"></ul>
     <div id="empty" class="empty" hidden>
-      <svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="6" y="10" width="36" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M21 18.5v11l9-5.5z" fill="currentColor"/></svg>
+      <svg viewBox="0 -960 960 960" width="32" height="32" aria-hidden="true"><path fill="currentColor" d="m380-300 280-180-280-180v360ZM160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h640q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160Zm0-80h640v-480H160v480Z"/></svg>
       <p id="emptyTitle">No videos found yet</p>
-      <p id="emptyText" class="muted">Start playing a video, then open this window again.</p>
+      <p id="emptyText">Play a video, then open this again.</p>
     </div>
     <p id="error" class="error" hidden></p>
   </main>
 
   <footer>
-    <label class="switch"><input type="checkbox" id="enabled"><span class="track"></span>Catch downloads</label>
-    <label class="switch"><input type="checkbox" id="showVideoButton"><span class="track"></span>Video button</label>
-    <label class="switch" id="siteRow" hidden><input type="checkbox" id="siteOn"><span class="track"></span><span id="siteName"></span></label>
+    <label class="setting"><span>Send downloads to the app</span><span class="toggle"><input type="checkbox" id="enabled"><span class="track"></span><span class="knob"></span></span></label>
+    <label class="setting"><span>Download button on videos</span><span class="toggle"><input type="checkbox" id="showVideoButton"><span class="track"></span><span class="knob"></span></span></label>
+    <label class="setting" id="siteRow" hidden><span id="siteName"></span><span class="toggle"><input type="checkbox" id="siteOn"><span class="track"></span><span class="knob"></span></span></label>
   </footer>
   <script type="module" src="popup.js"></script>
 </body>

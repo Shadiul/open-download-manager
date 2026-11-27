@@ -1,149 +1,103 @@
+/* Chrome's own look (Material 3, as in the downloads bubble and settings): its colours, type,
+   list rows, round icon buttons, menus and toggles. */
 :root {
-  --bg: #f9f9f9;
-  --card: #ffffff;
-  --card-hover: #f5f5f5;
-  --stroke: rgba(0, 0, 0, 0.0578);
-  --text: #1a1a1a;
-  --muted: #5d5d5d;
-  --accent: #005fb8;
-  --accent-text: #ffffff;
-  --accent-hover: #0067c0;
-  --chip: rgba(0, 0, 0, 0.06);
-  --ok-bg: #dff6dd; --ok: #0f7b0f;
-  --bad-bg: #fde7e9; --bad: #c42b1c;
-  --wait-bg: rgba(0, 0, 0, 0.06);
-  --thumb: linear-gradient(135deg, #4b9bff, #4a3bd6);
+  color-scheme: light dark;
+  --surface: #ffffff; --surface-2: #f0f4f9; --text: #1f1f1f; --text-2: #474747; --divider: #e3e3e3;
+  --primary: #0b57d0; --on-primary: #ffffff; --tonal: #d3e3fd; --on-tonal: #041e49;
+  --hover: rgba(31, 31, 31, 0.08); --pressed: rgba(31, 31, 31, 0.12);
+  --thumb: #e9eef6; --thumb-icon: #5f6368; --menu: #ffffff; --menu-shadow: 0 2px 6px 2px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --toggle-off-track: #e3e3e3; --toggle-off-knob: #747775; --ok: #146c2e; --ok-bg: #c4eed0; --bad: #b3261e;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #202020;
-    --card: #2b2b2b;
-    --card-hover: #323232;
-    --stroke: rgba(255, 255, 255, 0.0698);
-    --text: #ffffff;
-    --muted: #c5c5c5;
-    --accent: #60cdff;
-    --accent-text: #000000;
-    --accent-hover: #5ab8e6;
-    --chip: rgba(255, 255, 255, 0.08);
-    --ok-bg: #393d1b; --ok: #6ccb5f;
-    --bad-bg: #442726; --bad: #ff99a4;
-    --wait-bg: rgba(255, 255, 255, 0.08);
+    --surface: #282a2c; --surface-2: #1f1f1f; --text: #e3e3e3; --text-2: #c4c7c5; --divider: #3c3d3f;
+    --primary: #a8c7fa; --on-primary: #062e6f; --tonal: #004a77; --on-tonal: #c2e7ff;
+    --hover: rgba(227, 227, 227, 0.08); --pressed: rgba(227, 227, 227, 0.12);
+    --thumb: #333537; --thumb-icon: #c4c7c5; --menu: #303134; --menu-shadow: 0 2px 6px 2px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.5);
+    --toggle-off-track: #444746; --toggle-off-knob: #8e918f; --ok: #6dd58c; --ok-bg: #0f5223; --bad: #f2b8b5;
   }
 }
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body {
-  width: 400px;
-  margin: 0;
-  font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  color: var(--text);
-  background: var(--bg);
+  width: 380px; margin: 0; background: var(--surface); color: var(--text);
+  font: 13px/20px system-ui, "Segoe UI", Roboto, sans-serif;
 }
+button { font: inherit; color: inherit; }
 
-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 12px 10px 14px;
+/* ----- header, like a Chrome bubble's title row ----- */
+header { display: flex; align-items: center; gap: 10px; padding: 12px 8px 8px 16px; }
+h1 { flex: 1; margin: 0; font-size: 15px; font-weight: 500; line-height: 22px; }
+.status { font-size: 12px; line-height: 16px; padding: 2px 8px; border-radius: 8px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; }
+.status.ok { background: var(--ok-bg); color: var(--ok); }
+.status.bad { color: var(--bad); }
+
+.icon-button {
+  display: grid; place-items: center; width: 32px; height: 32px; flex: none;
+  border: 0; border-radius: 50%; background: transparent; color: var(--text-2); cursor: pointer;
 }
-header strong { flex: 1; font-size: 14px; font-weight: 600; }
-.pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--wait-bg); color: var(--muted); white-space: nowrap; }
-.pill.ok { background: var(--ok-bg); color: var(--ok); }
-.pill.bad { background: var(--bad-bg); color: var(--bad); }
-.icon-btn {
-  display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px;
-  background: transparent; color: var(--muted); cursor: pointer;
-}
-.icon-btn:hover { background: var(--chip); color: var(--text); }
+.icon-button:hover { background: var(--hover); color: var(--text); }
+.icon-button:active { background: var(--pressed); }
+.icon-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.icon-button.tonal { background: var(--tonal); color: var(--on-tonal); }
+.icon-button.tonal:hover { filter: brightness(1.06); }
+.icon-button:disabled { opacity: 0.5; cursor: default; }
 
-main { padding: 0 8px; }
-.section-title { display: flex; justify-content: space-between; padding: 4px 6px 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
-.count { font-weight: 400; }
+/* ----- the list ----- */
+.section { display: flex; justify-content: space-between; padding: 4px 16px 4px; color: var(--text-2); font-size: 12px; font-weight: 500; }
+ul { list-style: none; margin: 0; padding: 0 8px 4px; max-height: 360px; overflow-y: auto; }
+ul::-webkit-scrollbar { width: 8px; }
+ul::-webkit-scrollbar-thumb { background: var(--divider); border-radius: 4px; border: 2px solid var(--surface); }
 
-ul { list-style: none; margin: 0; padding: 0 0 4px; max-height: 430px; overflow-y: auto; display: grid; gap: 6px; }
-ul::-webkit-scrollbar { width: 6px; }
-ul::-webkit-scrollbar-thumb { background: var(--chip); border-radius: 3px; }
-
-.card {
-  display: grid;
-  grid-template-columns: 112px 1fr;
-  gap: 10px;
-  padding: 8px;
-  border: 1px solid var(--stroke);
-  border-radius: 8px;
-  background: var(--card);
-}
-.card:hover { background: var(--card-hover); }
-
+/* One row per video: the thumbnail is exactly as tall as the row. */
+.item { position: relative; display: grid; grid-template-columns: 96px 1fr auto; align-items: stretch; gap: 12px; padding: 6px 8px; border-radius: 8px; }
+.item:hover { background: var(--hover); }
 .thumb {
-  position: relative;
-  width: 112px;
-  height: 63px;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--thumb);
-  display: grid;
-  place-items: center;
-  color: #fff;
+  position: relative; height: 54px; width: 96px; border-radius: 6px; overflow: hidden;
+  background: var(--thumb); color: var(--thumb-icon); display: grid; place-items: center;
 }
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.thumb svg { opacity: 0.9; }
 .duration {
   position: absolute; right: 4px; bottom: 4px; padding: 0 4px; border-radius: 4px;
-  background: rgba(0, 0, 0, 0.72); color: #fff; font-size: 11px; line-height: 16px;
+  background: rgba(0, 0, 0, 0.75); color: #fff; font-size: 11px; line-height: 15px;
 }
+.text { min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.title { font-size: 13px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.meta { color: var(--text-2); font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta.done { color: var(--ok); }
+.meta.failed { color: var(--bad); }
+.actions { display: flex; align-items: center; gap: 2px; }
 
-.info { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.title {
-  font-weight: 600;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  word-break: break-word;
+/* ----- quality menu, like Chrome's menus ----- */
+.menu {
+  position: fixed; z-index: 10; min-width: 220px; max-height: 240px; overflow-y: auto;
+  padding: 8px 0; border-radius: 8px; background: var(--menu); box-shadow: var(--menu-shadow);
 }
-.meta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; color: var(--muted); font-size: 11px; }
-.chip { padding: 0 6px; border-radius: 4px; background: var(--chip); line-height: 18px; }
-.chip.strong { color: var(--text); font-weight: 600; }
-.host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.actions { display: flex; gap: 6px; margin-top: 2px; }
-button.primary, button.secondary {
-  height: 28px; padding: 0 12px; border-radius: 4px; font: 600 12px/1 inherit; cursor: pointer;
+.menu .menu-title { padding: 4px 16px 6px; color: var(--text-2); font-size: 12px; }
+.menu button {
+  display: flex; justify-content: space-between; gap: 16px; width: 100%; padding: 6px 16px; border: 0;
+  background: transparent; text-align: left; cursor: pointer; line-height: 20px;
 }
-button.primary { border: 0; background: var(--accent); color: var(--accent-text); }
-button.primary:hover { background: var(--accent-hover); }
-button.secondary { border: 1px solid var(--stroke); background: var(--chip); color: var(--text); }
-button.secondary:hover { background: var(--card-hover); }
-button:disabled { opacity: 0.6; cursor: default; }
+.menu button:hover { background: var(--hover); }
+.menu button span:last-child { color: var(--text-2); }
 
-.qualities { grid-column: 1 / -1; display: grid; gap: 2px; margin-top: 2px; }
-.quality {
-  display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 6px 8px;
-  border: 0; border-radius: 4px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
-}
-.quality:hover { background: var(--chip); }
-.quality span:last-child { color: var(--muted); }
-
-.empty { display: grid; justify-items: center; gap: 2px; padding: 26px 16px 22px; color: var(--muted); text-align: center; }
+.empty { display: grid; justify-items: center; gap: 2px; padding: 20px 24px 16px; text-align: center; color: var(--text-2); }
 .empty p { margin: 0; }
-#emptyTitle { color: var(--text); font-weight: 600; margin-top: 6px; }
-.muted { color: var(--muted); }
-.error { color: var(--bad); margin: 6px; }
+#emptyTitle { color: var(--text); font-weight: 500; margin-top: 6px; }
+.error { margin: 4px 16px 8px; color: var(--bad); font-size: 12px; }
 
-footer {
-  display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 14px 12px;
-  border-top: 1px solid var(--stroke); margin-top: 6px;
+/* ----- quick settings, as Chrome setting rows ----- */
+footer { border-top: 1px solid var(--divider); padding: 4px 0 6px; margin-top: 4px; }
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; padding: 0 16px; cursor: pointer; }
+.setting:hover { background: var(--hover); }
+.toggle { position: relative; width: 34px; height: 20px; flex: none; }
+.toggle input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.toggle .track { position: absolute; inset: 0; border-radius: 10px; background: var(--toggle-off-track); transition: background 0.15s; }
+.toggle .knob {
+  position: absolute; top: 4px; left: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--toggle-off-knob);
+  transition: transform 0.15s, background 0.15s, width 0.15s, height 0.15s, top 0.15s, left 0.15s;
 }
-.switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; user-select: none; }
-.switch input { position: absolute; opacity: 0; pointer-events: none; }
-.track {
-  position: relative; width: 28px; height: 16px; border-radius: 8px; border: 1px solid var(--muted); flex: none;
-  transition: background 0.12s, border-color 0.12s;
-}
-.track::after {
-  content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%;
-  background: var(--muted); transition: transform 0.12s, background 0.12s;
-}
-.switch input:checked + .track { background: var(--accent); border-color: var(--accent); }
-.switch input:checked + .track::after { transform: translateX(12px); background: var(--accent-text); }
-.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toggle input:checked ~ .track { background: var(--primary); }
+.toggle input:checked ~ .knob { transform: translateX(14px); top: 2px; left: 2px; width: 16px; height: 16px; background: var(--on-primary); }
+.toggle input:focus-visible ~ .track { outline: 2px solid var(--primary); outline-offset: 2px; }

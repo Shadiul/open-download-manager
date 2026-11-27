@@ -109,33 +109,69 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <CommandBar x:Name="Actions" HorizontalAlignment="Left" DefaultLabelPosition="Right" Background="Transparent" IsDynamicOverflowEnabled="False">
-                        <AppBarButton Icon="Add" Label="Add" Click="OnAddClick" ToolTipService.ToolTip="Add a download (Ctrl+N)">
-                            <AppBarButton.KeyboardAccelerators>
+                    <!-- Toolbar: subtle Fluent buttons. Labels hide when space is short, leaving
+                         compact 36 px icon buttons with tooltips (see OnBodySizeChanged). -->
+                    <StackPanel x:Name="Actions" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                        <StackPanel.Resources>
+                            <Style TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Padding" Value="9,0" />
+                                <Setter Property="Height" Value="34" />
+                                <Setter Property="MinWidth" Value="36" />
+                                <Setter Property="CornerRadius" Value="4" />
+                            </Style>
+                        </StackPanel.Resources>
+                        <Button Click="OnAddClick" ToolTipService.ToolTip="Add a download (Ctrl+N)" AutomationProperties.Name="Add">
+                            <Button.KeyboardAccelerators>
                                 <KeyboardAccelerator Modifiers="Control" Key="N" />
-                            </AppBarButton.KeyboardAccelerators>
-                        </AppBarButton>
-                        <AppBarSeparator />
-                        <AppBarButton Icon="Play" Label="Resume" Click="OnResumeClick" ToolTipService.ToolTip="Resume the checked downloads" />
-                        <AppBarButton Icon="Pause" Label="Pause" Click="OnPauseClick" ToolTipService.ToolTip="Pause the checked downloads" />
-                        <AppBarButton Icon="Delete" Label="Remove" Click="OnRemoveClick" ToolTipService.ToolTip="Remove the checked downloads from the list (Delete)">
-                            <AppBarButton.KeyboardAccelerators>
+                            </Button.KeyboardAccelerators>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE710;" FontSize="16" />
+                                <TextBlock x:Name="LabelAdd" Text="Add" />
+                            </StackPanel>
+                        </Button>
+                        <Rectangle Width="1" Height="20" Margin="4,0" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                        <Button Click="OnResumeClick" ToolTipService.ToolTip="Resume" AutomationProperties.Name="Resume">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE768;" FontSize="16" />
+                                <TextBlock x:Name="LabelResume" Text="Resume" />
+                            </StackPanel>
+                        </Button>
+                        <Button Click="OnPauseClick" ToolTipService.ToolTip="Pause" AutomationProperties.Name="Pause">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE769;" FontSize="16" />
+                                <TextBlock x:Name="LabelPause" Text="Pause" />
+                            </StackPanel>
+                        </Button>
+                        <Button Click="OnRemoveClick" ToolTipService.ToolTip="Remove (Delete)" AutomationProperties.Name="Remove">
+                            <Button.KeyboardAccelerators>
                                 <KeyboardAccelerator Key="Delete" />
-                            </AppBarButton.KeyboardAccelerators>
-                        </AppBarButton>
-                        <CommandBar.SecondaryCommands>
-                            <AppBarButton Label="Resume all" Click="OnResumeAllClick">
-                                <AppBarButton.Icon><FontIcon Glyph="&#xE768;" /></AppBarButton.Icon>
-                            </AppBarButton>
-                            <AppBarButton Label="Pause all" Click="OnPauseAllClick">
-                                <AppBarButton.Icon><FontIcon Glyph="&#xE769;" /></AppBarButton.Icon>
-                            </AppBarButton>
-                            <AppBarSeparator />
-                            <AppBarButton Icon="Up" Label="Move up in queue" Click="OnMoveUpClick" />
-                            <AppBarButton Icon="Download" Label="Move down in queue" Click="OnMoveDownClick" />
-                            <AppBarButton Icon="Clear" Label="Clear finished" Click="OnClearCompletedClick" />
-                        </CommandBar.SecondaryCommands>
-                    </CommandBar>
+                            </Button.KeyboardAccelerators>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE74D;" FontSize="16" />
+                                <TextBlock x:Name="LabelRemove" Text="Remove" />
+                            </StackPanel>
+                        </Button>
+                        <Button ToolTipService.ToolTip="More" AutomationProperties.Name="More">
+                            <FontIcon Glyph="&#xE712;" FontSize="16" />
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <MenuFlyoutItem Text="Resume all" Click="OnResumeAllClick">
+                                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE768;" /></MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem Text="Pause all" Click="OnPauseAllClick">
+                                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE769;" /></MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutSeparator />
+                                    <MenuFlyoutItem Text="Move up in queue" Icon="Up" Click="OnMoveUpClick" />
+                                    <MenuFlyoutItem Text="Move down in queue" Icon="Download" Click="OnMoveDownClick" />
+                                    <MenuFlyoutSeparator />
+                                    <MenuFlyoutItem Text="Clear finished" Icon="Clear" Click="OnClearCompletedClick" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                    </StackPanel>
 
                     <StackPanel x:Name="Tools" Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <AutoSuggestBox x:Name="Search" PlaceholderText="Search downloads" Width="220" QueryIcon="Find"

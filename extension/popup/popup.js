@@ -4,7 +4,40 @@ import { formatDuration } from '../lib/cards.js';
 
 const $ = (id) => document.getElementById(id);
 const send = (msg) => chrome.runtime.sendMessage(msg);
-const el = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+};
+
+// Material Symbols, as Chrome uses.
+const ICONS = {
+  download: 'M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z',
+  more: 'M480-345 240-585l56-56 184 184 184-184 56 56-240 240Z',
+  check: 'M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z',
+  play: 'M320-200v-560l440 280-440 280Z'
+};
+function icon(name, size = 20) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 -960 960 960');
+  svg.setAttribute('width', size);
+  svg.setAttribute('height', size);
+  svg.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS(ns, 'path');
+  p.setAttribute('d', ICONS[name]);
+  p.setAttribute('fill', 'currentColor');
+  svg.append(p);
+  return svg;
+}
+function iconButton(name, label, tonal = false) {
+  const b = el('button', `icon-button${tonal ? ' tonal' : ''}`);
+  b.title = label;
+  b.setAttribute('aria-label', label);
+  b.append(icon(name));
+  return b;
+}
 
 function formatSize(bytes) {
   if (!(bytes > 0)) return '';
@@ -14,28 +47,23 @@ function formatSize(bytes) {
   return `${bytes.toFixed(i > 1 ? 1 : 0)} ${units[i]}`;
 }
 
-const KIND_LABEL = { page: 'Video post', hls: 'HLS stream', dash: 'DASH stream', video: 'Video file', audio: 'Audio' };
+const KIND = { page: 'Video post', hls: 'HLS stream', dash: 'DASH stream', video: 'Video file', audio: 'Audio' };
 
 function matches(host, pattern) {
   const p = pattern.trim().toLowerCase().replace(/^\*\./, '').replace(/^www\./, '');
   return !!p && (host === p || host.endsWith('.' + p));
 }
 
-const playIcon = () => {
-  const ns = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('width', '26');
-  svg.setAttribute('height', '26');
-  const path = document.createElementNS(ns, 'path');
-  path.setAttribute('d', 'M8 5.5v13l11-6.5z');
-  path.setAttribute('fill', 'currentColor');
-  svg.append(path);
-  return svg;
-};
+let openMenu = null;
+function closeMenu() {
+  openMenu?.remove();
+  openMenu = null;
+}
+document.addEventListener('click', (e) => { if (openMenu && !openMenu.contains(e.target)) closeMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 
-function cardView(card, tab) {
-  const li = el('li', 'card');
+function row(card, tab) {
+  const li = el('li', 'item');
 
   const thumb = el('div', 'thumb');
   if (card.poster) {
@@ -43,75 +71,83 @@ function cardView(card, tab) {
     img.src = card.poster;
     img.alt = '';
     img.referrerPolicy = 'no-referrer';
-    img.onerror = () => { img.remove(); thumb.prepend(playIcon()); };
+    img.onerror = () => { img.remove(); thumb.prepend(icon('play', 24)); };
     thumb.append(img);
   } else {
-    thumb.append(playIcon());
+    thumb.append(icon('play', 24));
   }
   const d = formatDuration(card.duration);
   if (d) thumb.append(el('span', 'duration', d));
 
-  const info = el('div', 'info');
+  const text = el('div', 'text');
   const title = el('div', 'title', card.title || 'Untitled video');
   title.title = card.title || card.item.url;
-  const meta = el('div', 'meta');
-  if (card.quality) meta.append(el('span', 'chip strong', `${card.quality}p`));
-  meta.append(el('span', 'chip', KIND_LABEL[card.kind] || card.kind));
-  if (card.size > 0) meta.append(el('span', 'chip', formatSize(card.size)));
-  if (card.host) meta.append(el('span', 'host', card.host));
+  const details = [card.quality ? `${card.quality}p` : '', KIND[card.kind] || card.kind, formatSize(card.size), card.host].filter(Boolean).join(' · ');
+  const meta = el('div', 'meta', details);
+  text.append(title, meta);
 
   const actions = el('div', 'actions');
-  const download = el('button', 'primary', 'Download');
-  download.title = card.kind === 'page' ? 'Best quality' : card.item.url;
+  const download = iconButton('download', card.kind === 'page' ? 'Download (best quality)' : 'Download', true);
   actions.append(download);
 
-  const status = (text, ok) => {
-    download.textContent = text;
-    download.disabled = ok;
-    if (!ok) setTimeout(() => { download.textContent = 'Download'; download.disabled = false; }, 2500);
-  };
-
   async function sendItem(item) {
+    closeMenu();
     download.disabled = true;
-    download.textContent = 'Sending…';
     const r = await send({ type: 'send-media', tabId: tab.id, item, videoId: card.id, title: card.title, source: 'media' });
-    if (r?.ok) status('Sent ✓', true);
-    else { status('Retry', false); showError(r?.error || 'Could not reach Open Download Manager'); }
+    if (r?.ok) {
+      download.replaceChildren(icon('check'));
+      download.title = 'Sent';
+      meta.textContent = 'Sent to Open Download Manager';
+      meta.className = 'meta done';
+    } else {
+      download.disabled = false;
+      meta.textContent = r?.error || 'Could not reach Open Download Manager';
+      meta.className = 'meta failed';
+      meta.title = meta.textContent;
+    }
   }
   download.addEventListener('click', () => sendItem(card.item));
 
   if (card.kind === 'page') {
-    const pick = el('button', 'secondary', 'Quality');
-    pick.title = 'Choose a quality';
-    actions.append(pick);
-    let list = null;
-    pick.addEventListener('click', async () => {
-      if (list) { list.remove(); list = null; return; }
-      pick.disabled = true;
-      pick.textContent = 'Loading…';
+    const more = iconButton('more', 'Choose a quality');
+    actions.append(more);
+    more.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (openMenu?.dataset.for === card.id) { closeMenu(); return; }
+      closeMenu();
+      const menu = el('div', 'menu');
+      menu.dataset.for = card.id;
+      menu.append(el('div', 'menu-title', 'Getting qualities…'));
+      document.body.append(menu);
+      openMenu = menu;
+      // Below the button, or above it when the popup has no room underneath.
+      const place = () => {
+        const r = more.getBoundingClientRect();
+        menu.style.right = `${Math.max(8, innerWidth - r.right)}px`;
+        const below = r.bottom + 4;
+        menu.style.top = below + menu.offsetHeight <= innerHeight - 4 ? `${below}px` : `${Math.max(4, r.top - 4 - menu.offsetHeight)}px`;
+      };
+      place();
       const r = await send({ type: 'probe-page', url: card.item.url });
-      pick.disabled = false;
-      pick.textContent = 'Quality';
-      if (!r?.ok || !r.formats?.length) { showError(r?.error ? `Could not list the qualities: ${r.error}` : 'Could not list the qualities'); return; }
-      list = el('div', 'qualities');
-      for (const f of r.formats) {
-        const row = el('button', 'quality');
-        row.append(el('span', '', f.label || f.id), el('span', '', [f.ext, formatSize(f.size)].filter(Boolean).join(' · ')));
-        row.addEventListener('click', () => sendItem({ kind: 'page', url: r.url, formatId: f.id, size: f.size > 0 ? f.size : -1 }));
-        list.append(row);
+      if (openMenu !== menu) return;
+      if (!r?.ok || !r.formats?.length) {
+        menu.replaceChildren(el('div', 'menu-title', r?.error ? `Could not list the qualities: ${r.error}` : 'Could not list the qualities'));
+        return;
       }
-      li.append(list);
+      menu.replaceChildren(el('div', 'menu-title', 'Quality'));
+      queueMicrotask(place);
+      for (const f of r.formats) {
+        const b = el('button');
+        b.append(el('span', '', f.label || f.id), el('span', '', [f.ext, formatSize(f.size)].filter(Boolean).join(' · ')));
+        b.addEventListener('click', () => sendItem({ kind: 'page', url: r.url, formatId: f.id, size: f.size > 0 ? f.size : -1 }));
+        menu.append(b);
+      }
+      place();
     });
   }
 
-  info.append(title, meta, actions);
-  li.append(thumb, info);
+  li.append(thumb, text, actions);
   return li;
-}
-
-function showError(text) {
-  $('error').hidden = false;
-  $('error').textContent = text;
 }
 
 async function init() {
@@ -131,7 +167,7 @@ async function init() {
   })();
   if (host) {
     $('siteRow').hidden = false;
-    $('siteName').textContent = `On ${host}`;
+    $('siteName').textContent = `Use on ${host}`;
     $('siteOn').checked = !(settings.excludedHosts || []).some((p) => matches(host, p));
     $('siteOn').addEventListener('change', (e) => {
       const others = (settings.excludedHosts || []).filter((h) => !matches(host, h));
@@ -141,22 +177,21 @@ async function init() {
 
   // ----- app status -----
   send({ type: 'ping-host' }).then((r) => {
-    const pill = $('host');
-    pill.textContent = !r.ok ? 'App not found' : r.running ? 'Connected' : 'Ready';
-    pill.className = `pill ${!r.ok ? 'bad' : r.running ? 'ok' : ''}`;
-    pill.title = !r.ok ? r.error || '' : r.running ? 'Open Download Manager is running' : 'The app starts with the first download';
+    const s = $('host');
+    s.textContent = !r.ok ? 'App not found' : r.running ? 'Connected' : 'Ready';
+    s.className = `status ${!r.ok ? 'bad' : r.running ? 'ok' : ''}`;
+    s.title = !r.ok ? r.error || '' : r.running ? 'Open Download Manager is running' : 'The app starts with the first download';
   });
 
-  // ----- the videos on this page -----
+  // ----- videos on this page -----
   const cards = tab ? await send({ type: 'get-tab-cards', tabId: tab.id }) : [];
   $('count').textContent = cards.length ? String(cards.length) : '';
-  const list = $('cards');
-  for (const card of cards) list.append(cardView(card, tab));
+  for (const card of cards) $('cards').append(row(card, tab));
   $('empty').hidden = cards.length > 0;
   if (!YOUTUBE_ENABLED && tab && pageDownloadUrl(tab.url)) {
     $('empty').hidden = false;
     $('emptyTitle').textContent = 'YouTube is not available in this version';
-    $('emptyText').textContent = 'Copy this page\'s link: Open Download Manager offers to download it.';
+    $('emptyText').textContent = 'Copy the page link: Open Download Manager offers to download it.';
   }
 }
 

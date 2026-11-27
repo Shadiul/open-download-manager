@@ -164,14 +164,14 @@ public sealed partial class MainWindow : Window
         var narrow = e.NewSize.Width < 860;
         // When space is short the actions keep their icons and lose their labels, rather than
         // disappearing into the overflow menu.
-        Actions.DefaultLabelPosition = e.NewSize.Width < 1080 && !narrow || e.NewSize.Width < 480
-            ? CommandBarDefaultLabelPosition.Collapsed
-            : CommandBarDefaultLabelPosition.Right;
+        var labels = !(e.NewSize.Width < 1040 && !narrow || e.NewSize.Width < 440);
+        foreach (var label in new[] { LabelAdd, LabelResume, LabelPause, LabelRemove })
+            label.Visibility = labels ? Visibility.Visible : Visibility.Collapsed;
         Grid.SetRow(Tools, narrow ? 1 : 0);
         Grid.SetColumn(Tools, narrow ? 0 : 1);
         Grid.SetColumnSpan(Tools, narrow ? 2 : 1);
         Tools.HorizontalAlignment = narrow ? HorizontalAlignment.Stretch : HorizontalAlignment.Right;
-        Search.Width = narrow ? Math.Max(140, e.NewSize.Width - 460) : e.NewSize.Width < 1080 ? 160 : 220;
+        Search.Width = narrow ? Math.Max(140, e.NewSize.Width - 460) : e.NewSize.Width < 1040 ? 180 : 220;
         if (Tools.Parent != Body && narrow)
         {
             ((Panel)Tools.Parent).Children.Remove(Tools);
@@ -391,6 +391,7 @@ public sealed partial class MainWindow : Window
     private void OnItemDoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
     {
         if ((e.OriginalSource as FrameworkElement)?.DataContext is not DownloadItem item) return;
+        e.Handled = true;
         if (item is { IsCompleted: true, FilePath: { } path }) Shell.Open(path);
         else App.Current?.ShowProgressWindow(item);
     }
