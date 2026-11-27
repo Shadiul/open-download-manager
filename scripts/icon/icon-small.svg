@@ -1,21 +1,34 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <!-- The icon drawn for 32 px and below: a bigger globe, two continents, a plainer rocket and no
-       shadows, so it stays crisp in the taskbar, the tray and the browser toolbar. -->
+  <!-- The icon drawn for 32 px and below, in icon.svg's colours: a bigger globe, a plainer rocket,
+       no shadows, and a firmer rim so the light tile still shows on light backgrounds. -->
   <defs>
-    <linearGradient id="tile" x1="0" y1="0" x2="0.6" y2="1">
-      <stop offset="0" stop-color="#4f7cf7"/><stop offset="1" stop-color="#1aa7a0"/>
+    <linearGradient id="tile" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#F4FBFD"/><stop offset="1" stop-color="#BEE1EC"/>
     </linearGradient>
-    <clipPath id="g"><circle cx="14.5" cy="17.5" r="10.5"/></clipPath>
+    <radialGradient id="globe" cx="34%" cy="28%" r="74%">
+      <stop offset="0" stop-color="#BCE9F2"/><stop offset="0.45" stop-color="#6BB9D3"/><stop offset="1" stop-color="#2D6E96"/>
+    </radialGradient>
+    <linearGradient id="nose" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6EE7D8"/><stop offset="1" stop-color="#0A82A8"/>
+    </linearGradient>
+    <clipPath id="g"><circle cx="16" cy="16.5" r="11"/></clipPath>
+    <clipPath id="hull"><path d="M 0 -10 C 3 -6.5 3.4 -1 2.6 5.4 L -2.6 5.4 C -3.4 -1 -3 -6.5 0 -10 Z"/></clipPath>
   </defs>
-  <rect x="1" y="1" width="30" height="30" rx="8" fill="url(#tile)"/>
-  <circle cx="14.5" cy="17.5" r="10.5" fill="#5cc3ea"/>
-  <g clip-path="url(#g)" fill="#1fae8c">
-    <path d="M 4 12 C 7 9 12 9 13 12 C 12 15 9 15 7 17 C 5 17 3 15 4 12 Z"/>
-    <path d="M 17 14 C 20 13 23 15 23 19 C 22 23 19 26 18 24 C 18 21 15 19 17 14 Z"/>
+  <rect x="1" y="1" width="30" height="30" rx="7.5" fill="url(#tile)"/>
+  <rect x="1.5" y="1.5" width="29" height="29" rx="7" fill="none" stroke="#5B9FB8" stroke-opacity="0.55"/>
+  <circle cx="16" cy="16.5" r="11" fill="url(#globe)"/>
+  <g clip-path="url(#g)" fill="#1A5878" fill-opacity="0.45">
+    <path d="M 5 13 C 7 9 12 8.5 14 11 C 13 14 10 14.5 8 17 C 6 17 4.5 15.5 5 13 Z"/>
+    <path d="M 19 15 C 22 14 26 16 27 19 L 27 23 C 24 25 21 25 20 23 C 19 21 17 18 19 15 Z"/>
   </g>
-  <g transform="translate(20.5 11.5) rotate(42) scale(1.15)">
-    <path d="M 0 -10 C 4 -7 4.5 -1 3.4 6 L -3.4 6 C -4.5 -1 -4 -7 0 -10 Z" fill="#ffffff"/>
-    <path d="M -3.2 1 L -6.5 6.5 L -3.2 6 Z M 3.2 1 L 6.5 6.5 L 3.2 6 Z" fill="#b9e6ff"/>
-    <circle cx="0" cy="-3.5" r="1.7" fill="#3b82f6"/>
+  <circle cx="16" cy="16.5" r="10.6" fill="none" stroke="#FFFFFF" stroke-opacity="0.6" stroke-width="0.8"/>
+  <!-- a slim rocket on the globe's diagonal -->
+  <g transform="translate(18.2 14.3) rotate(45)">
+    <path d="M -2.4 1.5 L -5.4 6.4 L -2.4 5.4 Z" fill="#65B8CC"/>
+    <path d="M 2.4 1.5 L 5.4 6.4 L 2.4 5.4 Z" fill="#357E9E"/>
+    <path d="M 0 -10 C 3 -6.5 3.4 -1 2.6 5.4 L -2.6 5.4 C -3.4 -1 -3 -6.5 0 -10 Z" fill="#FFFFFF"/>
+    <g clip-path="url(#hull)"><rect x="-4" y="-11" width="8" height="5.2" fill="url(#nose)"/></g>
+    <circle cx="0" cy="-1.6" r="1.35" fill="#199CD0"/>
+    <path d="M -1.2 5.6 L 1.2 5.6 L 0 8.6 Z" fill="#6EE7D8"/>
   </g>
 </svg>

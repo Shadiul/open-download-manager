@@ -1,128 +1,338 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <!-- Open Download Manager: a rocket leaving the globe, on a blue-to-teal tile.
-       The rocket sits on the diagonal through the globe's centre, and the pair is centred on the tile.
-       This is the artwork for 40 px and up; icon-small.svg is drawn for 32 px and below.
-       scripts/icon/render-icon.ps1 renders both into every size the project uses. -->
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="72 66 880 880" width="1024" height="1024">
+  <!-- The app icon (40 px and up). Framed tighter than its 1024 canvas so the tile fills a Windows
+       icon like Fluent app icons do; icon-small.svg is drawn for 32 px and below. -->
   <defs>
-    <linearGradient id="tile" x1="0" y1="0" x2="0.6" y2="1">
-      <stop offset="0" stop-color="#4f7cf7"/>
-      <stop offset="1" stop-color="#16a39c"/>
+    
+    <linearGradient id="bgBase" x1="12%" y1="8%" x2="88%" y2="92%">
+      <stop offset="0%" stop-color="#F4FBFD" />
+      <stop offset="48%" stop-color="#DEF2F7" />
+      <stop offset="100%" stop-color="#BEE1EC" />
     </linearGradient>
-    <radialGradient id="tileLight" cx="30%" cy="6%" r="85%">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.24"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+
+    <radialGradient id="bgTopGlow" cx="24%" cy="18%" r="65%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.85" />
+      <stop offset="55%" stop-color="#E6F7FB" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#A7D6E6" stop-opacity="0" />
     </radialGradient>
-    <linearGradient id="sea" x1="0.15" y1="0" x2="0.85" y2="1">
-      <stop offset="0" stop-color="#8fe0f8"/>
-      <stop offset="0.55" stop-color="#4bb4ec"/>
-      <stop offset="1" stop-color="#2f86da"/>
+
+    <radialGradient id="bgBottomTint" cx="82%" cy="85%" r="60%">
+      <stop offset="0%" stop-color="#5DBAD0" stop-opacity="0.28" />
+      <stop offset="100%" stop-color="#5DBAD0" stop-opacity="0" />
+    </radialGradient>
+
+    <linearGradient id="bgGlassRim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95" />
+      <stop offset="35%" stop-color="#FFFFFF" stop-opacity="0.35" />
+      <stop offset="70%" stop-color="#76B5CA" stop-opacity="0.22" />
+      <stop offset="100%" stop-color="#4A8FA8" stop-opacity="0.42" />
     </linearGradient>
-    <!-- Night side: the globe darkens towards the lower right. -->
-    <radialGradient id="night" cx="30%" cy="26%" r="85%">
-      <stop offset="0.55" stop-color="#0b3a8a" stop-opacity="0"/>
-      <stop offset="1" stop-color="#0b3a8a" stop-opacity="0.42"/>
+
+    <radialGradient id="ambientHalo" cx="50%" cy="52%" r="48%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.24" />
+      <stop offset="65%" stop-color="#2DD4BF" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0" />
     </radialGradient>
-    <radialGradient id="sheen" cx="32%" cy="24%" r="45%">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.45"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+
+    
+    <radialGradient id="globeSphere" cx="34%" cy="28%" r="74%">
+      <stop offset="0%" stop-color="#BCE9F2" />
+      <stop offset="32%" stop-color="#7EC8DC" />
+      <stop offset="70%" stop-color="#4A9BC0" />
+      <stop offset="100%" stop-color="#2D6E96" />
     </radialGradient>
-    <linearGradient id="trail" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.75"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+
+    <radialGradient id="globeFresnel" cx="50%" cy="50%" r="50%">
+      <stop offset="72%" stop-color="#FFFFFF" stop-opacity="0" />
+      <stop offset="91%" stop-color="#CFF5FC" stop-opacity="0.24" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.52" />
+    </radialGradient>
+
+    <linearGradient id="globeTopSheen" x1="18%" y1="8%" x2="62%" y2="68%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.52" />
+      <stop offset="42%" stop-color="#FFFFFF" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
     </linearGradient>
-    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffd66b"/>
-      <stop offset="0.6" stop-color="#ff9a4d"/>
-      <stop offset="1" stop-color="#ff7a45" stop-opacity="0"/>
-    </linearGradient>
-    <radialGradient id="glass" cx="38%" cy="34%" r="70%">
-      <stop offset="0" stop-color="#7cc4ff"/>
-      <stop offset="1" stop-color="#1d4ed8"/>
+
+    <radialGradient id="globeBounce" cx="76%" cy="80%" r="45%">
+      <stop offset="0%" stop-color="#7FF2E2" stop-opacity="0.34" />
+      <stop offset="100%" stop-color="#7FF2E2" stop-opacity="0" />
     </radialGradient>
-    <filter id="tileShadow" x="-20%" y="-20%" width="140%" height="150%">
-      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#0b2f6b" flood-opacity="0.25"/>
+
+    <linearGradient id="continentPrimary" x1="10%" y1="0%" x2="90%" y2="100%">
+      <stop offset="0%" stop-color="#2E8B94" stop-opacity="0.46" />
+      <stop offset="100%" stop-color="#1A5878" stop-opacity="0.38" />
+    </linearGradient>
+
+    <linearGradient id="continentLayered" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#62C8C2" stop-opacity="0.36" />
+      <stop offset="100%" stop-color="#297B94" stop-opacity="0.24" />
+    </linearGradient>
+
+    
+    <linearGradient id="orbitStroke" x1="10%" y1="85%" x2="88%" y2="18%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0" />
+      <stop offset="35%" stop-color="#D8F8FC" stop-opacity="0.55" />
+      <stop offset="72%" stop-color="#7EE8E0" stop-opacity="0.72" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+
+    <linearGradient id="plumeOuter" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#76EFE3" stop-opacity="0.88" />
+      <stop offset="45%" stop-color="#38BDF8" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#38BDF8" stop-opacity="0" />
+    </linearGradient>
+
+    <linearGradient id="plumeCore" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95" />
+      <stop offset="55%" stop-color="#C6FAF4" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#76EFE3" stop-opacity="0" />
+    </linearGradient>
+
+    
+    <linearGradient id="rocketHull" x1="0%" y1="15%" x2="100%" y2="25%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="36%" stop-color="#F0FAFC" />
+      <stop offset="74%" stop-color="#C8E6F0" />
+      <stop offset="100%" stop-color="#96C5D8" />
+    </linearGradient>
+
+    <linearGradient id="rocketSpec" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+
+    <linearGradient id="rocketNose" x1="5%" y1="10%" x2="95%" y2="85%">
+      <stop offset="0%" stop-color="#6EE7D8" />
+      <stop offset="48%" stop-color="#22C3C8" />
+      <stop offset="100%" stop-color="#0A82A8" />
+    </linearGradient>
+
+    <linearGradient id="collarGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#D9F5F9" />
+      <stop offset="50%" stop-color="#98D2E2" />
+      <stop offset="100%" stop-color="#5B9FB8" />
+    </linearGradient>
+
+    <linearGradient id="finLeftLight" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#BCEEF2" />
+      <stop offset="100%" stop-color="#65B8CC" />
+    </linearGradient>
+
+    <linearGradient id="finLeftShade" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#63B4C9" />
+      <stop offset="100%" stop-color="#357E9E" />
+    </linearGradient>
+
+    <linearGradient id="finRightLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#92D6E4" />
+      <stop offset="100%" stop-color="#4594B2" />
+    </linearGradient>
+
+    <linearGradient id="finRightShade" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4795B3" />
+      <stop offset="100%" stop-color="#256384" />
+    </linearGradient>
+
+    <linearGradient id="centerFinL" x1="0%" y1="0%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#D7F6F9" />
+      <stop offset="100%" stop-color="#76C6D6" />
+    </linearGradient>
+
+    <linearGradient id="centerFinR" x1="0%" y1="0%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#5BB0C7" />
+      <stop offset="100%" stop-color="#2D7596" />
+    </linearGradient>
+
+    <linearGradient id="bezelGrad" x1="15%" y1="10%" x2="85%" y2="90%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="52%" stop-color="#CBE8F0" />
+      <stop offset="100%" stop-color="#6EAEC4" />
+    </linearGradient>
+
+    <radialGradient id="windowGlass" cx="35%" cy="30%" r="72%">
+      <stop offset="0%" stop-color="#7CE7FA" />
+      <stop offset="48%" stop-color="#199CD0" />
+      <stop offset="100%" stop-color="#074F7A" />
+    </radialGradient>
+
+    <linearGradient id="nozzleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#87C3D6" />
+      <stop offset="45%" stop-color="#5A9CB6" />
+      <stop offset="100%" stop-color="#2D6682" />
+    </linearGradient>
+
+    
+    <clipPath id="squircleClip">
+      <rect x="100" y="100" width="824" height="824" rx="186" />
+    </clipPath>
+
+    <clipPath id="globeClip">
+      <circle cx="512" cy="512" r="292" />
+    </clipPath>
+
+    <clipPath id="rocketHullClip">
+      <path d="M 0 -192 C 44 -135 64 -56 57 48 C 53 89 43 116 34 132 L -34 132 C -43 116 -53 89 -57 48 C -64 -56 -44 -135 0 -192 Z" />
+    </clipPath>
+
+    
+    <filter id="squircleShadow" x="-15%" y="-12%" width="130%" height="135%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#184761" flood-opacity="0.19" />
     </filter>
-    <filter id="lift" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="2" dy="6" stdDeviation="5" flood-color="#0b2f6b" flood-opacity="0.32"/>
+
+    <filter id="globeShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="20" stdDeviation="22" flood-color="#1C5370" flood-opacity="0.24" />
     </filter>
-    <clipPath id="g"><circle cx="120" cy="134" r="78"/></clipPath>
-    <clipPath id="hull"><path d="M 0 -86 C 30 -62 34 -12 26 46 L -26 46 C -34 -12 -30 -62 0 -86 Z"/></clipPath>
+
+    <filter id="rocketShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="-8" dy="18" stdDeviation="16" flood-color="#0F3B54" flood-opacity="0.3" />
+    </filter>
+
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="7" />
+    </filter>
   </defs>
 
-  <!-- tile -->
-  <rect x="18" y="16" width="220" height="220" rx="56" fill="url(#tile)" filter="url(#tileShadow)"/>
-  <rect x="18" y="16" width="220" height="220" rx="56" fill="url(#tileLight)"/>
-  <rect x="18.75" y="16.75" width="218.5" height="218.5" rx="55.25" fill="none" stroke="#ffffff" stroke-opacity="0.3" stroke-width="1.5"/>
-  <g fill="#ffffff">
-    <circle cx="52" cy="50" r="2.2" opacity="0.7"/>
-    <circle cx="74" cy="34" r="1.4" opacity="0.55"/>
-    <circle cx="40" cy="80" r="1.3" opacity="0.5"/>
-    <circle cx="214" cy="196" r="1.8" opacity="0.55"/>
-    <circle cx="200" cy="216" r="1.3" opacity="0.45"/>
-    <circle cx="222" cy="150" r="1.2" opacity="0.4"/>
+  
+  <g filter="url(#squircleShadow)">
+    <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bgBase)" />
+    <g clip-path="url(#squircleClip)">
+      <rect x="100" y="100" width="824" height="824" fill="url(#bgTopGlow)" />
+      <rect x="100" y="100" width="824" height="824" fill="url(#bgBottomTint)" />
+      
+      <circle cx="512" cy="524" r="390" fill="url(#ambientHalo)" />
+    </g>
+    
+    <rect x="101.5" y="101.5" width="821" height="821" rx="184.5" fill="none" stroke="url(#bgGlassRim)" stroke-width="3" />
   </g>
 
-  <!-- globe -->
-  <circle cx="120" cy="134" r="78" fill="url(#sea)" filter="url(#lift)"/>
-  <g clip-path="url(#g)">
-    <!-- faint grid -->
-    <g fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="1.3">
-      <ellipse cx="120" cy="134" rx="32" ry="78"/>
-      <ellipse cx="120" cy="134" rx="62" ry="78"/>
-      <path d="M 42 134 H 198 M 50 98 Q 120 112 190 98 M 50 170 Q 120 156 190 170"/>
-    </g>
-    <!-- land: the Americas, Greenland, Europe, Africa, and a few islands -->
-    <g fill="#1fae8c" stroke="#8be8cf" stroke-opacity="0.7" stroke-width="1.4" stroke-linejoin="round">
-      <path d="M 58 90 C 66 74 88 66 108 70 C 120 72 126 80 118 88 C 110 94 114 102 106 108 C 98 114 90 112 86 120 C 82 126 74 122 70 114 C 64 106 52 104 58 90 Z"/>
-      <ellipse cx="118" cy="62" rx="11" ry="6"/>
-      <path d="M 94 134 C 106 130 120 138 118 152 C 116 164 108 172 104 186 C 102 196 96 200 94 192 C 92 180 88 170 86 158 C 84 146 86 138 94 134 Z"/>
-      <path d="M 140 86 C 150 80 164 82 168 90 C 162 96 154 94 148 100 C 142 102 136 94 140 86 Z"/>
-      <path d="M 142 112 C 156 106 174 110 184 122 C 192 132 188 144 180 154 C 172 166 168 180 158 188 C 152 192 148 184 150 174 C 152 162 142 154 138 142 C 134 130 132 118 142 112 Z"/>
-      <ellipse cx="132" cy="84" rx="3.5" ry="5" transform="rotate(-20 132 84)"/>
-      <circle cx="188" cy="170" r="5"/>
-      <circle cx="194" cy="118" r="3"/>
-    </g>
-    <!-- clouds -->
-    <g fill="#ffffff" opacity="0.32">
-      <path d="M 60 146 Q 74 140 88 146 Q 80 150 66 150 Z"/>
-      <path d="M 122 120 Q 136 114 152 120 Q 142 125 128 124 Z"/>
-      <path d="M 104 196 Q 118 190 134 196 Q 122 201 110 200 Z"/>
-    </g>
-    <circle cx="120" cy="134" r="78" fill="url(#night)"/>
-  </g>
-  <circle cx="120" cy="134" r="78" fill="url(#sheen)"/>
-  <circle cx="120" cy="134" r="77" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="2"/>
+  
+  <g filter="url(#globeShadow)">
+    <circle cx="512" cy="512" r="292" fill="url(#globeSphere)" />
 
-  <!-- rocket, on the diagonal through the globe's centre, leaving to the upper right -->
-  <g transform="translate(160 94) rotate(45) scale(0.78)">
-    <!-- trail and flame -->
-    <path d="M -11 58 Q 0 124 0 132 Q 0 124 11 58 Z" fill="url(#trail)" opacity="0.7"/>
-    <path d="M -10 56 Q 0 92 10 56 Z" fill="url(#flame)"/>
-    <path d="M -5 56 Q 0 76 5 56 Z" fill="#fff6d6"/>
-    <g filter="url(#lift)">
-      <!-- fins -->
-      <path d="M -24 4 C -48 12 -58 40 -52 66 L -22 48 Z" fill="#9fd8ff"/>
-      <path d="M -24 4 C -40 14 -46 36 -46 56 L -22 48 Z" fill="#7cc1f2"/>
-      <path d="M 24 4 C 48 12 58 40 52 66 L 22 48 Z" fill="#7cc1f2"/>
-      <path d="M 24 4 C 40 14 46 36 46 56 L 22 48 Z" fill="#9fd8ff"/>
-      <!-- nozzle -->
-      <path d="M -14 44 H 14 L 11 58 H -11 Z" fill="#5b6b86"/>
-      <path d="M -14 44 H 14 L 13 48 H -13 Z" fill="#7b8ba6"/>
-      <!-- hull, with its shaded side, nose cone and band -->
-      <path d="M 0 -86 C 30 -62 34 -12 26 46 L -26 46 C -34 -12 -30 -62 0 -86 Z" fill="#ffffff"/>
-      <g clip-path="url(#hull)">
-        <path d="M 4 -90 C 16 -50 16 0 8 50 L 40 50 L 40 -90 Z" fill="#dbe8fb"/>
-        <rect x="-40" y="-92" width="80" height="34" fill="#3b82f6"/>
-        <rect x="6" y="-92" width="34" height="34" fill="#2563eb"/>
-        <rect x="-40" y="16" width="80" height="8" fill="#3b82f6"/>
-        <rect x="6" y="16" width="34" height="8" fill="#2563eb"/>
+    <g clip-path="url(#globeClip)">
+      
+      <g fill="none" stroke="#FFFFFF" stroke-opacity="0.11" stroke-width="2">
+        <ellipse cx="512" cy="512" rx="115" ry="292" transform="rotate(-14 512 512)" />
+        <ellipse cx="512" cy="512" rx="215" ry="292" transform="rotate(-14 512 512)" />
+        <path d="M 210 430 Q 512 375 814 430" />
+        <path d="M 210 585 Q 512 645 814 585" />
       </g>
-      <!-- centre fin -->
-      <path d="M -5 26 H 5 L 4 56 H -4 Z" fill="#7cc1f2"/>
-      <!-- porthole -->
-      <circle cx="0" cy="-26" r="15" fill="#e8f1ff" stroke="#a9c4ea" stroke-width="1.5"/>
-      <circle cx="0" cy="-26" r="10.5" fill="url(#glass)"/>
-      <ellipse cx="-3.5" cy="-30" rx="3.6" ry="2.4" fill="#ffffff" opacity="0.85" transform="rotate(-30 -3.5 -30)"/>
+
+      
+      <g fill="url(#continentPrimary)">
+        
+        <path d="M 218 395 C 232 332 288 286 358 282 C 396 280 436 296 446 328 C 455 356 426 378 408 396 C 388 416 378 434 366 456 C 358 470 374 484 364 500 C 350 518 318 504 294 484 C 266 460 226 444 218 395 Z" />
+        
+        <path d="M 432 246 C 464 226 526 232 548 262 C 562 282 544 314 508 320 C 476 325 446 306 434 282 C 426 266 424 252 432 246 Z" />
+        
+        <path d="M 366 528 C 402 520 456 544 480 584 C 502 620 486 676 454 718 C 434 745 412 772 394 762 C 378 752 380 704 366 664 C 350 618 332 578 342 548 C 348 534 356 530 366 528 Z" />
+        
+        <path d="M 638 386 C 684 362 758 388 806 448 L 806 636 C 768 682 712 716 674 712 C 642 708 634 658 626 614 C 618 570 590 544 594 498 C 598 452 608 402 638 386 Z" />
+        
+        <ellipse cx="732" cy="656" rx="14" ry="31" transform="rotate(18 732 656)" />
+        <ellipse cx="404" cy="488" rx="15" ry="7" transform="rotate(14 404 488)" />
+      </g>
+
+      
+      <g fill="url(#continentLayered)">
+        <path d="M 248 398 C 266 346 320 314 382 320 C 414 324 422 356 398 380 C 372 406 342 426 334 456 C 328 474 288 468 264 446 C 246 430 242 414 248 398 Z" />
+        <path d="M 382 552 C 412 550 452 574 464 608 C 474 636 456 680 430 706 C 414 722 396 684 384 646 C 370 604 364 554 382 552 Z" />
+        <path d="M 656 420 C 696 408 748 432 778 476 L 778 602 C 744 642 702 668 678 662 C 656 656 650 612 642 574 C 634 532 622 432 656 420 Z" />
+      </g>
+
+      
+      <circle cx="408" cy="392" r="222" fill="#FFFFFF" opacity="0.14" />
+      <ellipse cx="425" cy="336" rx="176" ry="118" transform="rotate(-24 425 336)" fill="url(#globeTopSheen)" />
+
+      
+      <circle cx="512" cy="512" r="292" fill="url(#globeBounce)" />
+      <circle cx="512" cy="512" r="292" fill="url(#globeFresnel)" />
+    </g>
+
+    
+    <circle cx="512" cy="512" r="290.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="2.5" />
+  </g>
+
+  
+  <g>
+    <path d="M 276 694 C 244 650 288 572 386 524" fill="none" stroke="url(#orbitStroke)" stroke-width="8" stroke-linecap="round" opacity="0.7" />
+    <path d="M 294 714 C 344 748 472 722 598 634 C 690 568 758 486 766 430" fill="none" stroke="url(#orbitStroke)" stroke-width="5" stroke-linecap="round" opacity="0.55" />
+    
+    <circle cx="308" cy="656" r="5" fill="#FFFFFF" opacity="0.72" />
+    <circle cx="348" cy="698" r="3.5" fill="#B8F7F2" opacity="0.78" />
+    <circle cx="722" cy="492" r="4" fill="#FFFFFF" opacity="0.65" />
+  </g>
+
+  
+  <g transform="translate(578, 434) rotate(45)" filter="url(#rocketShadow)">
+    
+    <path d="M -22 142 C -26 196 -14 252 0 295 C 14 252 26 196 22 142 Z" fill="url(#plumeOuter)" filter="url(#softGlow)" />
+    <path d="M -12 142 C -14 186 -7 228 0 254 C 7 228 14 186 12 142 Z" fill="url(#plumeCore)" />
+
+    
+    <path d="M -52 34 C -104 54 -124 104 -114 160 C -88 134 -64 120 -34 118 Z" fill="url(#finLeftLight)" />
+    <path d="M -52 34 C -84 70 -96 108 -114 160 C -88 134 -64 120 -34 118 Z" fill="url(#finLeftShade)" opacity="0.45" />
+    <path d="M -52 36 C -98 56 -118 100 -112 152" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" opacity="0.65" />
+
+    
+    <path d="M 52 34 C 104 54 124 104 114 160 C 88 134 64 120 34 118 Z" fill="url(#finRightLight)" />
+    <path d="M 52 34 C 84 70 96 108 114 160 C 88 134 64 120 34 118 Z" fill="url(#finRightShade)" opacity="0.55" />
+    <path d="M 52 36 C 98 56 118 100 112 152" fill="none" stroke="#D2F4FA" stroke-width="2" stroke-linecap="round" opacity="0.45" />
+
+    
+    <path d="M -30 124 L 30 124 L 26 138 Q 0 144 -26 138 Z" fill="url(#collarGrad)" />
+    <path d="M -24 134 L 24 134 L 30 154 Q 0 164 -30 154 Z" fill="url(#nozzleGrad)" />
+    <ellipse cx="0" cy="154" rx="22" ry="5" fill="#164A66" opacity="0.7" />
+
+    
+    <path d="M 0 -192 C 44 -135 64 -56 57 48 C 53 89 43 116 34 132 L -34 132 C -43 116 -53 89 -57 48 C -64 -56 -44 -135 0 -192 Z" fill="url(#rocketHull)" />
+
+    
+    <g clip-path="url(#rocketHullClip)">
+      
+      <path d="M -60 -98 Q 0 -76 60 -98 L 68 -202 L -68 -202 Z" fill="url(#rocketNose)" />
+      
+      <path d="M -60 -98 Q 0 -76 60 -98" fill="none" stroke="#FFFFFF" stroke-width="3.5" opacity="0.65" />
+      <path d="M -60 -94 Q 0 -72 60 -94" fill="none" stroke="#0B5F80" stroke-width="2" opacity="0.24" />
+
+      
+      <path d="M -58 76 Q 0 92 58 76" fill="none" stroke="#4D8CA6" stroke-width="2" opacity="0.22" />
+      <path d="M -58 79 Q 0 95 58 79" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.45" />
+
+      
+      <path d="M -10 -184 C -34 -128 -44 -48 -38 50 C -35 84 -28 112 -22 132 L -48 132 C -56 96 -62 40 -58 -48 C -52 -118 -34 -162 -10 -184 Z" fill="url(#rocketSpec)" />
+      
+      <path d="M -4 -180 C -22 -150 -32 -122 -36 -96" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" opacity="0.5" />
+
+      
+      <path d="M 48 -110 C 58 -44 58 46 42 132 L 64 132 L 64 -110 Z" fill="#7FF2E2" opacity="0.22" />
+    </g>
+
+    
+    <path d="M 0 -192 C 44 -135 64 -56 57 48 C 53 89 43 116 34 132 L -34 132 C -43 116 -53 89 -57 48 C -64 -56 -44 -135 0 -192 Z" fill="none" stroke="#FFFFFF" stroke-opacity="0.48" stroke-width="2" />
+
+    
+    <g transform="translate(0, -20)">
+      
+      <circle cx="2" cy="4" r="34" fill="#1C5A78" opacity="0.18" />
+      
+      <circle cx="0" cy="0" r="34" fill="url(#bezelGrad)" />
+      <circle cx="0" cy="0" r="33" fill="none" stroke="#FFFFFF" stroke-opacity="0.65" stroke-width="1.5" />
+      
+      <circle cx="0" cy="0" r="26.5" fill="#176184" opacity="0.35" />
+      
+      <circle cx="0" cy="0" r="24.5" fill="url(#windowGlass)" />
+      
+      <path d="M -15 -9 A 17 17 0 0 1 8 -16" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" opacity="0.68" />
+      <circle cx="-13" cy="2" r="2.6" fill="#FFFFFF" opacity="0.55" />
+      <path d="M 14 11 A 17 17 0 0 1 -6 17" fill="none" stroke="#7FF2E2" stroke-width="2.5" stroke-linecap="round" opacity="0.42" />
+    </g>
+
+    
+    <g>
+      <path d="M 0 38 C -14 74 -14 124 0 168 Z" fill="url(#centerFinL)" />
+      <path d="M 0 38 C 14 74 14 124 0 168 Z" fill="url(#centerFinR)" />
+      <line x1="0" y1="42" x2="0" y2="162" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" opacity="0.65" />
     </g>
   </g>
 </svg>

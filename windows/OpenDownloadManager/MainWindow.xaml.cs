@@ -30,6 +30,8 @@ public sealed partial class MainWindow : Window
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+        // The caption buttons at their standard height, matching the 32 px title row.
+        AppWindow.TitleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Standard;
         AppWindow.SetIcon(AppPaths.IconPath);
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 700));
         if (AppWindow.Presenter is OverlappedPresenter p)
@@ -168,30 +170,40 @@ public sealed partial class MainWindow : Window
 
     // ----- responsive layout -----
 
-    /// <summary>Narrow windows put search and view options on their own row.</summary>
+    /// <summary>Width of the actions with their labels (Add, Pause/Resume, Remove, More).</summary>
+    private const double LabelledActionsWidth = 292;
+
+    /// <summary>
+    /// The search stays centred, so each side gets half of what it leaves. The actions show their
+    /// labels when that half fits them, shrinking the search a little first; otherwise they become
+    /// icon buttons. Narrow windows give the search a row of its own.
+    /// </summary>
     private void OnBodySizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var narrow = e.NewSize.Width < 620;
-        // When space is short the actions keep their icons and lose their labels, rather than
-        // disappearing into the overflow menu.
-        var labels = !(e.NewSize.Width < 1040 && !narrow || e.NewSize.Width < 440);
+        var width = e.NewSize.Width;
+        var narrow = width < 620;
+        var labels = false;
+        if (narrow)
+        {
+            Search.Width = double.NaN;
+            Search.HorizontalAlignment = HorizontalAlignment.Stretch;
+            Grid.SetRow(Search, 1);
+            Grid.SetColumn(Search, 0);
+            Grid.SetColumnSpan(Search, 3);
+        }
+        else
+        {
+            // Room for the search between two equal sides wide enough for the labelled actions.
+            var room = width - 2 * (LabelledActionsWidth + 8);
+            labels = room >= 170;
+            Search.Width = labels ? Math.Min(320, room) : Math.Clamp(width - 2 * 200, 160, 260);
+            Search.HorizontalAlignment = HorizontalAlignment.Center;
+            Grid.SetRow(Search, 0);
+            Grid.SetColumn(Search, 1);
+            Grid.SetColumnSpan(Search, 1);
+        }
         foreach (var label in new[] { LabelAdd, LabelPauseResume, LabelRemove })
             label.Visibility = labels ? Visibility.Visible : Visibility.Collapsed;
-        Grid.SetRow(Tools, narrow ? 1 : 0);
-        Grid.SetColumn(Tools, narrow ? 0 : 1);
-        Grid.SetColumnSpan(Tools, narrow ? 2 : 1);
-        Tools.HorizontalAlignment = narrow ? HorizontalAlignment.Stretch : HorizontalAlignment.Right;
-        Search.Width = narrow ? Math.Max(140, e.NewSize.Width - 150) : e.NewSize.Width < 1040 ? 170 : 220;
-        if (Tools.Parent != Body && narrow)
-        {
-            ((Panel)Tools.Parent).Children.Remove(Tools);
-            Body.Children.Add(Tools);
-        }
-        else if (Tools.Parent == Body && !narrow)
-        {
-            Body.Children.Remove(Tools);
-            Toolbar.Children.Add(Tools);
-        }
     }
 
     /// <summary>The list's width decides which columns fit.</summary>

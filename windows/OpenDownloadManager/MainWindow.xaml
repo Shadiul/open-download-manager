@@ -40,13 +40,13 @@
             </Style>
         </Grid.Resources>
         <Grid.RowDefinitions>
-            <RowDefinition Height="48" />
+            <RowDefinition Height="32" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid x:Name="AppTitleBar" Padding="16,0,0,0">
+        <Grid x:Name="AppTitleBar" Padding="12,0,0,0">
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <Image Source="ms-appx:///Assets/app.png" Width="20" Height="20" />
+                <Image Source="ms-appx:///Assets/app.png" Width="16" Height="16" />
                 <TextBlock Text="Open Download Manager" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
             </StackPanel>
         </Grid>
@@ -102,13 +102,20 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Toolbar: actions on the left, search and view options on the right. On narrow
-                     windows the right side moves to its own row (see OnContentSizeChanged). -->
-                <Grid x:Name="Toolbar" ColumnSpacing="8">
+                <!-- Toolbar: actions on the left, search in the centre, filter and view buttons on the
+                     right. On narrow windows the search takes its own row (see OnBodySizeChanged). -->
+                <Grid x:Name="Toolbar" ColumnSpacing="8" RowSpacing="6">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <AutoSuggestBox x:Name="Search" Grid.Column="1" PlaceholderText="Search downloads" Width="240" QueryIcon="Find"
+                                    VerticalAlignment="Center" TextChanged="OnSearchChanged" />
                     <!-- Toolbar: subtle Fluent buttons. Labels hide when space is short, leaving
                          compact 36 px icon buttons with tooltips (see OnBodySizeChanged). -->
                     <StackPanel x:Name="Actions" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
@@ -167,8 +174,9 @@
                         </Button>
                     </StackPanel>
 
-                    <!-- Search, then compact icon buttons with tooltips: filter, columns, view. -->
-                    <StackPanel x:Name="Tools" Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <!-- Compact icon buttons with tooltips: filter, columns, view. -->
+                    <StackPanel x:Name="Tools" Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center"
+                                HorizontalAlignment="Right">
                         <StackPanel.Resources>
                             <Style TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                                 <Setter Property="Background" Value="Transparent" />
@@ -179,8 +187,6 @@
                                 <Setter Property="CornerRadius" Value="4" />
                             </Style>
                         </StackPanel.Resources>
-                        <AutoSuggestBox x:Name="Search" PlaceholderText="Search" Width="200" QueryIcon="Find"
-                                        Margin="0,0,6,0" VerticalAlignment="Center" TextChanged="OnSearchChanged" />
                         <Button x:Name="StatusButton" ToolTipService.ToolTip="Show: any status" AutomationProperties.Name="Filter by status">
                             <Grid>
                                 <FontIcon Glyph="&#xE71C;" FontSize="16" />
@@ -267,6 +273,7 @@
                         </StackPanel>
                     </Button>
                     <Button Grid.Column="3" Width="170" Style="{StaticResource HeaderButton}" Tag="progress" Click="OnSortClick"
+                            Margin="0" HorizontalContentAlignment="Center"
                             Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <TextBlock Text="Progress" />
@@ -382,13 +389,15 @@
                                 </Grid>
                                 <TextBlock Grid.Column="1" Width="130" Style="{StaticResource Cell}" Text="{x:Bind SizeText, Mode=OneWay}"
                                            Visibility="{x:Bind services:ViewSettings.Current.SizeColumn, Mode=OneWay}" />
-                                <!-- Progress as text; the row itself shows it as a fill. -->
-                                <StackPanel Grid.Column="2" Width="170" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
-                                            Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}">
-                                    <FontIcon Glyph="{x:Bind StateGlyph, Mode=OneWay}" FontSize="12" Foreground="{x:Bind StatusBrush, Mode=OneWay}"
-                                              Visibility="{x:Bind StateVisible, Mode=OneWay}" />
-                                    <TextBlock Style="{StaticResource Cell}" Text="{x:Bind ProgressText, Mode=OneWay}" Foreground="{x:Bind StatusBrush, Mode=OneWay}" />
-                                </StackPanel>
+                                <!-- Progress as text, centred in its column; the row itself shows it as a fill. -->
+                                <Grid Grid.Column="2" Width="170" VerticalAlignment="Center"
+                                      Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                        <FontIcon Glyph="{x:Bind StateGlyph, Mode=OneWay}" FontSize="12" Foreground="{x:Bind StatusBrush, Mode=OneWay}"
+                                                  Visibility="{x:Bind StateVisible, Mode=OneWay}" />
+                                        <TextBlock Style="{StaticResource Cell}" Text="{x:Bind ProgressText, Mode=OneWay}" Foreground="{x:Bind StatusBrush, Mode=OneWay}" />
+                                    </StackPanel>
+                                </Grid>
                                 <TextBlock Grid.Column="3" Width="90" Style="{StaticResource Cell}" Text="{x:Bind SpeedText, Mode=OneWay}"
                                            Visibility="{x:Bind services:ViewSettings.Current.SpeedColumn, Mode=OneWay}" />
                                 <TextBlock Grid.Column="4" Width="80" Style="{StaticResource Cell}" Text="{x:Bind TimeLeftText, Mode=OneWay}"
