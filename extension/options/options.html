@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Open Download Manager settings</title>
+  <style>
+    body { max-width: 620px; margin: 24px auto; padding: 0 16px; font: 14px/1.5 "Segoe UI", system-ui, sans-serif; color: #1c1c1c; background: #fff; }
+    @media (prefers-color-scheme: dark) { body { color: #e6e6e6; background: #202124; } textarea, input { background: #2a2b2e; color: inherit; border-color: #555; } }
+    fieldset { border: 1px solid #ddd; border-radius: 8px; margin: 0 0 16px; padding: 12px 16px; }
+    legend { font-weight: 600; }
+    label { display: block; margin: 6px 0; }
+    textarea { width: 100%; min-height: 70px; font: 13px ui-monospace, Consolas, monospace; box-sizing: border-box; }
+    .hint { color: #888; font-size: 12px; }
+    button { border: 0; border-radius: 6px; padding: 6px 16px; background: #1f6feb; color: #fff; font: inherit; cursor: pointer; }
+    #saved { margin-left: 8px; color: #1f8a3b; }
+  </style>
+</head>
+<body>
+  <h1>Open Download Manager</h1>
+  <fieldset>
+    <legend>Downloads</legend>
+    <label><input type="checkbox" id="enabled"> Send browser downloads to Open Download Manager</label>
+    <label><input type="radio" name="mode" value="all"> Catch every download</label>
+    <label><input type="radio" name="mode" value="listed"> Only catch these file types</label>
+    <textarea id="extensions"></textarea>
+    <div class="hint">Separate file types with spaces or commas, without the dot.</div>
+    <label>Skip files smaller than <input type="number" id="minSizeKB" min="0" style="width:90px"> KB</label>
+    <label>Never catch downloads from these sites</label>
+    <textarea id="excludedHosts" placeholder="example.com"></textarea>
+    <div class="hint">One site per line. Subdomains are included.</div>
+  </fieldset>
+  <fieldset>
+    <legend>Video</legend>
+    <label><input type="checkbox" id="showVideoButton"> Show a "Download video" button over videos</label>
+  </fieldset>
+  <button id="save">Save</button><span id="saved" hidden>Saved</span>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

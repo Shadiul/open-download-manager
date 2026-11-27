@@ -1,0 +1,7 @@
+{
+  "name": "org.opendownloadmanager.host",
+  "description": "Open Download Manager",
+  "path": "test_host.bat",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://ohammiojomdnbnfhigkofgahnghdmolg/"]
+}

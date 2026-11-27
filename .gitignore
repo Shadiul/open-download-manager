@@ -1,0 +1,19 @@
+node_modules/
+native-host/received.jsonl
+*.pem
+dist/
+
+# Rust
+target/
+
+# .NET / Visual Studio
+bin/
+obj/
+.vs/
+*.user
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
