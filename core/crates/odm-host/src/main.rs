@@ -129,6 +129,8 @@ impl App for SystemApp {
     }
 
     fn launch(&mut self) -> io::Result<()> {
+        #[cfg(windows)]
+        stop_std_handle_inheritance();
         let exe = std::env::current_exe()?;
         let dir = exe.parent().ok_or_else(|| io::Error::other("host has no folder"))?;
         let app = dir.join(endpoint::APP_EXE);
@@ -154,6 +156,30 @@ impl App for SystemApp {
         cmd.spawn()
             .map(|_| ())
             .map_err(|e| io::Error::new(e.kind(), format!("cannot start {}: {e}", app.display())))
+    }
+}
+
+/// Our stdin and stdout are the browser's pipes. Windows hands inheritable handles to every child
+/// process, so without this the app would hold the browser's pipes open for as long as it runs.
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn stop_std_handle_inheritance() {
+    use std::ffi::c_void;
+    unsafe extern "system" {
+        fn GetStdHandle(which: u32) -> *mut c_void;
+        fn SetHandleInformation(handle: *mut c_void, mask: u32, flags: u32) -> i32;
+    }
+    const HANDLE_FLAG_INHERIT: u32 = 1;
+    const STD_HANDLES: [u32; 3] = [-10i32 as u32, -11i32 as u32, -12i32 as u32];
+    for which in STD_HANDLES {
+        // SAFETY: GetStdHandle has no preconditions; SetHandleInformation only changes a flag on
+        // a handle we own, and fails harmlessly on null or invalid handles.
+        unsafe {
+            let handle = GetStdHandle(which);
+            if !handle.is_null() && handle as isize != -1 {
+                SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0);
+            }
+        }
     }
 }
 

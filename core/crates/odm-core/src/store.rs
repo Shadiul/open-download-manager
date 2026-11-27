@@ -39,6 +39,8 @@ impl Store {
     }
 
     fn init(conn: Connection) -> Result<Self> {
+        // Another process (a second instance starting up) may hold the lock for a moment.
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         conn.execute_batch(SCHEMA)?;
         Ok(Self { conn: Mutex::new(conn) })
     }
@@ -58,6 +60,13 @@ impl Store {
             params![record.job.id as i64, data],
         )?;
         Ok(())
+    }
+
+    /// The highest job id ever stored, so new ids never reuse one.
+    pub fn max_job_id(&self) -> Result<u64> {
+        lock(&self.conn)
+            .query_row("SELECT COALESCE(MAX(id), 0) FROM jobs", [], |r| r.get::<_, i64>(0))
+            .map(|v| v as u64)
     }
 
     pub fn delete_job(&self, id: u64) -> Result<()> {

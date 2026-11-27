@@ -299,7 +299,11 @@ impl Actor {
         let env = Env::new(engine::client(), Arc::new(RateLimiter::new(settings.speed_limit)));
 
         let mut jobs = BTreeMap::new();
-        for mut rec in store.load_jobs().unwrap_or_default() {
+        let loaded = store.load_jobs();
+        if let Err(e) = &loaded {
+            sink(Event::Error { message: format!("Cannot read the saved downloads: {e}") });
+        }
+        for mut rec in loaded.unwrap_or_default() {
             // Downloads that were running when the app closed carry on.
             if rec.job.state.is_active() {
                 rec.job.state = JobState::Queued;
@@ -311,7 +315,8 @@ impl Actor {
                 Entry { rec, run: None, last_bytes: 0, last_at: Instant::now(), removing: None },
             );
         }
-        let next_id = jobs.keys().next_back().map_or(1, |id| id + 1);
+        // Never reuse an id that is in the database, even if its row failed to load.
+        let next_id = store.max_job_id().unwrap_or(0).max(jobs.keys().next_back().copied().unwrap_or(0)) + 1;
         Self {
             store,
             settings,

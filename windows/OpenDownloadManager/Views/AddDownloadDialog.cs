@@ -19,7 +19,8 @@ public sealed class AddDownloadDialog : ContentDialog
     private readonly TextBox _name = new() { Header = "File name (optional)" };
     private readonly TextBox _folder = new() { Header = "Save to", PlaceholderText = "Default download folder" };
     private readonly ComboBox _quality = new() { Header = "Quality", HorizontalAlignment = HorizontalAlignment.Stretch, Visibility = Visibility.Collapsed };
-    private readonly Button _find = new() { Content = "Find qualities", Visibility = Visibility.Collapsed };
+    private readonly Button _find = new() { Content = "Find qualities" };
+    private readonly StackPanel _findRow = new() { Orientation = Orientation.Horizontal, Spacing = 12, Visibility = Visibility.Collapsed };
     private readonly ProgressRing _busy = new() { IsActive = false, Width = 20, Height = 20 };
     private readonly TextBlock _note = new() { TextWrapping = TextWrapping.Wrap, Opacity = 0.8 };
     private readonly CheckBox _startNow = new() { Content = "Start now", IsChecked = true };
@@ -47,15 +48,14 @@ public sealed class AddDownloadDialog : ContentDialog
         Grid.SetColumn(browse, 1);
         folderRow.Children.Add(browse);
 
-        var findRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
-        findRow.Children.Add(_find);
-        findRow.Children.Add(_busy);
+        _findRow.Children.Add(_find);
+        _findRow.Children.Add(_busy);
 
         Content = new StackPanel
         {
             Spacing = 12,
             MinWidth = 460,
-            Children = { _url, findRow, _quality, _note, _name, folderRow, _startNow },
+            Children = { _url, _findRow, _quality, _note, _name, folderRow, _startNow },
         };
 
         _url.Text = url ?? "";
@@ -70,27 +70,33 @@ public sealed class AddDownloadDialog : ContentDialog
 
     private void UpdateKind()
     {
-        _find.Visibility = IsVideo ? Visibility.Visible : Visibility.Collapsed;
+        _findRow.Visibility = IsVideo ? Visibility.Visible : Visibility.Collapsed;
         _name.Visibility = IsVideo ? Visibility.Collapsed : Visibility.Visible;
         if (!IsVideo)
         {
             _quality.Visibility = Visibility.Collapsed;
             _formats = [];
         }
-        _note.Text = IsVideo && _formats.Count == 0 ? "This looks like a video page. Find qualities to choose one, or download the best quality." : "";
+        SetNote(IsVideo && _formats.Count == 0 ? "This looks like a video page. Find qualities to choose one, or download the best quality." : "");
+    }
+
+    private void SetNote(string? text)
+    {
+        _note.Text = text ?? "";
+        _note.Visibility = string.IsNullOrEmpty(_note.Text) ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private async Task Probe()
     {
         _busy.IsActive = true;
         _find.IsEnabled = false;
-        _note.Text = "Looking up the qualities…";
+        SetNote("Looking up the qualities…");
         var reply = await _core.CallAsync(new { type = "probe", url = _url.Text.Trim() });
         _busy.IsActive = false;
         _find.IsEnabled = true;
         if (reply["ok"]?.GetValue<bool>() != true)
         {
-            _note.Text = $"Could not list the qualities: {reply["error"]?.GetValue<string>()}. The best quality will be downloaded.";
+            SetNote($"Could not list the qualities: {reply["error"]?.GetValue<string>()}. The best quality will be downloaded.");
             return;
         }
         _title = reply["title"]?.GetValue<string>();
@@ -103,7 +109,7 @@ public sealed class AddDownloadDialog : ContentDialog
         }
         _quality.Visibility = _formats.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         if (_formats.Count > 0) _quality.SelectedIndex = 0;
-        _note.Text = _title ?? "";
+        SetNote(_title ?? "");
     }
 
     private async Task PickFolder()
@@ -121,7 +127,7 @@ public sealed class AddDownloadDialog : ContentDialog
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))
         {
             args.Cancel = true;
-            _note.Text = "Enter an http or https address.";
+            SetNote("Enter an http or https address.");
             return;
         }
         var deferral = args.GetDeferral();
@@ -143,7 +149,7 @@ public sealed class AddDownloadDialog : ContentDialog
         if (reply["ok"]?.GetValue<bool>() != true)
         {
             args.Cancel = true;
-            _note.Text = reply["error"]?.GetValue<string>() ?? "Could not add the download.";
+            SetNote(reply["error"]?.GetValue<string>() ?? "Could not add the download.");
         }
         deferral.Complete();
     }
