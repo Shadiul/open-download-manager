@@ -78,6 +78,12 @@ pub struct Job {
     pub finished_at: Option<i64>,
     /// Order in the queue; lower starts first.
     pub position: i64,
+    /// Came from the browser and waits for the user to confirm it in the new-download window.
+    pub awaiting_confirmation: bool,
+    /// The user chose the file name; it wins over the server's.
+    pub custom_name: bool,
+    /// The user chose the folder; category folders do not apply.
+    pub custom_dir: bool,
 }
 
 impl Default for Job {
@@ -106,6 +112,9 @@ impl Default for Job {
             created_at: 0,
             finished_at: None,
             position: 0,
+            awaiting_confirmation: false,
+            custom_name: false,
+            custom_dir: false,
         }
     }
 }

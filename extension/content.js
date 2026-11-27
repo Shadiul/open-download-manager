@@ -18,7 +18,13 @@
 
   const reported = new Set();
   let showButton = true;
-  send({ type: 'get-settings' }).then((s) => { showButton = s?.showVideoButton !== false; });
+  const siteSkipped = (s) => (s?.excludedHosts || []).some((p) => {
+    p = p.trim().toLowerCase().replace(/^\*\./, '').replace(/^www\./, '');
+    const h = location.hostname.toLowerCase().replace(/^www\./, '');
+    return p && (h === p || h.endsWith('.' + p));
+  });
+  const applySettings = (s) => { showButton = s?.showVideoButton !== false && !siteSkipped(s); };
+  send({ type: 'get-settings' }).then(applySettings);
 
   // YouTube pages (and youtube embeds in other sites' iframes) are sent as page links.
   const isYouTube = /(^|\.)youtube(-nocookie)?\.com$/i.test(location.hostname);
@@ -49,6 +55,8 @@
   let target = null;
   let hideTimer = null;
   let menuOpen = false;
+  // The x hides the button until the next video.
+  let dismissed = false;
 
   function ensureUi() {
     if (root) return;
@@ -58,10 +66,24 @@
     button.type = 'button';
     button.className = 'odm-btn';
     button.textContent = LABEL;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'odm-close';
+    close.textContent = '×';
+    close.title = "Hide for this video (turn the button off in the extension's settings)";
+    close.setAttribute('aria-label', 'Hide the download button');
+    close.addEventListener('click', () => {
+      dismissed = true;
+      closeMenu();
+      root.classList.remove('odm-visible');
+    });
+    const bar = document.createElement('div');
+    bar.className = 'odm-bar';
+    bar.append(button, close);
     menu = document.createElement('div');
     menu.className = 'odm-menu';
     menu.hidden = true;
-    root.append(button, menu);
+    root.append(bar, menu);
     button.addEventListener('click', onButton);
     root.addEventListener('mouseenter', () => clearTimeout(hideTimer));
     root.addEventListener('mouseleave', scheduleHide);
@@ -131,13 +153,14 @@
       return;
     }
     const rows = r.formats.map((f) => menuRow(f.label || f.id, [f.ext, formatSize(f.size)].filter(Boolean).join(' · '),
-      () => sendItem({ kind: 'page', url: r.url, formatId: f.id })));
+      () => sendItem({ kind: 'page', url: r.url, formatId: f.id, size: f.size > 0 ? f.size : -1 })));
     if (r.title) rows.unshift(Object.assign(document.createElement('div'), { className: 'odm-note', textContent: r.title }));
     menu.replaceChildren(...rows);
   }
 
   function place(video) {
     const r = video.getBoundingClientRect();
+    if (dismissed || !showButton) return;
     if (r.width < 160 || r.height < 90) return; // skip tiny previews
     ensureUi();
     root.style.top = `${Math.max(r.top + 10, 8)}px`;
@@ -181,7 +204,13 @@
   window.addEventListener('resize', follow, { passive: true });
   document.addEventListener('fullscreenchange', () => setTimeout(follow, 100));
   // YouTube changes videos without reloading the page.
-  window.addEventListener('yt-navigate-finish', () => { closeMenu(); root?.classList.remove('odm-visible'); });
+  window.addEventListener('yt-navigate-finish', () => { dismissed = false; closeMenu(); root?.classList.remove('odm-visible'); });
+  // Settings changed in the popup take effect without reloading the page.
+  chrome.storage.onChanged.addListener((changes) => {
+    if (!changes.settings) return;
+    applySettings(changes.settings.newValue);
+    if (!showButton) { closeMenu(); root?.classList.remove('odm-visible'); }
+  });
 
   scan();
   let scanTimer = null;

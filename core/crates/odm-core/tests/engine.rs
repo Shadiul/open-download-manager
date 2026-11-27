@@ -28,6 +28,7 @@ fn job(url: &str, dir: &Path, connections: usize) -> HttpJob {
         file_name: String::new(),
         save_dir: dir.to_path_buf(),
         category_folders: false,
+        fixed_name: false,
         total: None,
         resumable: false,
         segments: Vec::new(),

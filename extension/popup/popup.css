@@ -16,5 +16,7 @@ button:disabled { opacity: .6; cursor: default; }
 .muted { color: #888; }
 .error { color: #c62828; }
 .row { display: flex; gap: 6px; align-items: center; }
+.toggle { padding: 3px 0; cursor: pointer; }
+.small { font-size: 11px; margin: 4px 0 0; }
 footer { margin-top: 10px; text-align: right; }
 a { color: #1f6feb; }

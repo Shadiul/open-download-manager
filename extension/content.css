@@ -23,6 +23,19 @@
   white-space: nowrap;
 }
 .odm-btn:hover { background: #1a5fd0; }
+.odm-bar { display: flex; gap: 2px; }
+.odm-bar .odm-btn { border-radius: 6px 0 0 6px; }
+.odm-close {
+  width: 28px;
+  border: 0;
+  border-radius: 0 6px 6px 0;
+  background: #1f6feb;
+  color: #fff;
+  font: 16px/1 "Segoe UI", Roboto, system-ui, sans-serif;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+.odm-close:hover { background: #c62828; }
 .odm-menu {
   min-width: 220px;
   max-width: 320px;

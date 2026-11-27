@@ -25,6 +25,7 @@ public sealed partial class DownloadItem : ObservableObject
     [ObservableProperty] public partial int Connections { get; set; }
     [ObservableProperty] public partial long Position { get; set; }
     [ObservableProperty] public partial long CreatedAt { get; set; }
+    [ObservableProperty] public partial bool AwaitingConfirmation { get; set; }
 
     public DownloadItem(ulong id) => Id = id;
 
@@ -54,6 +55,7 @@ public sealed partial class DownloadItem : ObservableObject
         Connections = (int)(Long(j, "connections") ?? 0);
         Position = Long(j, "position") ?? 0;
         CreatedAt = Long(j, "createdAt") ?? 0;
+        AwaitingConfirmation = j["awaitingConfirmation"]?.GetValue<bool>() ?? false;
 
         OnPropertyChanged(nameof(DisplayName));
         OnPropertyChanged(nameof(Progress));
@@ -107,6 +109,7 @@ public sealed partial class DownloadItem : ObservableObject
                     ? $"{Format.Speed(Speed)}{Eta()}{(Connections > 1 ? $" · {Connections} connections" : "")}"
                     : "Downloading",
                 "waitingToRetry" => "Connection lost, retrying…",
+                "paused" when AwaitingConfirmation => "Waiting for you to confirm",
                 "paused" => Resumable || Downloaded == 0 ? "Paused" : "Paused (will restart: server cannot resume)",
                 "completed" => "Done",
                 "failed" => LinkExpired ? "Link expired — use Refresh address" : $"Failed: {Error}",

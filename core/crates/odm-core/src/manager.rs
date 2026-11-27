@@ -111,6 +111,19 @@ pub enum Command {
         id: u64,
         limit: u64,
     },
+    /// Changes the name or folder of a download that has not started.
+    Edit {
+        id: u64,
+        #[serde(default)]
+        file_name: Option<String>,
+        #[serde(default)]
+        save_dir: Option<String>,
+    },
+    /// The answer from the new-download window: start now, or keep it for later.
+    Confirm {
+        id: u64,
+        start: bool,
+    },
 }
 
 /// A new download, from the app's add dialog or the browser.
@@ -130,6 +143,8 @@ pub struct AddSpec {
     pub title: Option<String>,
     /// `false` adds the job paused.
     pub start: Option<bool>,
+    /// Paused until the user confirms it in the new-download window.
+    pub confirm: bool,
 }
 
 impl From<DownloadRequest> for AddSpec {
@@ -148,6 +163,7 @@ impl From<DownloadRequest> for AddSpec {
             format_id: r.format_id.filter(|s| !s.is_empty()),
             title: r.page_title.filter(|s| !s.is_empty()),
             start: Some(true),
+            confirm: false,
         }
     }
 }
@@ -496,6 +512,19 @@ impl Actor {
                 }
                 json!({ "ok": true })
             }
+            Command::Edit { id, file_name, save_dir } => self.edit(id, file_name, save_dir),
+            Command::Confirm { id, start } => {
+                let Some(e) = self.jobs.get_mut(&id) else {
+                    return json!({ "ok": false, "error": "No such download" });
+                };
+                e.rec.job.awaiting_confirmation = false;
+                if start {
+                    return self.resume(id);
+                }
+                self.save(id);
+                self.emit_job(id);
+                json!({ "ok": true })
+            }
             Command::SetJobSpeedLimit { id, limit } => {
                 let Some(e) = self.jobs.get_mut(&id) else {
                     return json!({ "ok": false, "error": "No such download" });
@@ -552,7 +581,12 @@ impl Actor {
             file_name,
             save_dir: save_dir.to_string_lossy().into_owned(),
             total_size: spec.size,
-            state: if spec.start.unwrap_or(true) { JobState::Queued } else { JobState::Paused },
+            state: if spec.start.unwrap_or(true) && !spec.confirm {
+                JobState::Queued
+            } else {
+                JobState::Paused
+            },
+            awaiting_confirmation: spec.confirm,
             media_kind: spec.media_kind,
             format_id: spec.format_id,
             from_browser,
@@ -603,9 +637,12 @@ impl Actor {
             self.schedule();
             return Ok(());
         }
+        // One download at a time gets the new-download window; "Download all links" does not.
+        let confirm = self.settings.confirm_browser_downloads && items.len() == 1;
         let mut first_error = None;
         for item in items {
-            if let Err(e) = self.add(AddSpec::from(item), true) {
+            let spec = AddSpec { confirm, ..AddSpec::from(item) };
+            if let Err(e) = self.add(spec, true) {
                 first_error.get_or_insert(e);
             }
         }
@@ -613,6 +650,26 @@ impl Actor {
             Some(e) if self.jobs.is_empty() => Err(e),
             _ => Ok(()),
         }
+    }
+
+    fn edit(&mut self, id: u64, file_name: Option<String>, save_dir: Option<String>) -> Value {
+        let Some(e) = self.jobs.get_mut(&id) else {
+            return json!({ "ok": false, "error": "No such download" });
+        };
+        if e.run.is_some() || e.rec.request.name_decided || e.rec.job.state == JobState::Completed {
+            return json!({ "ok": false, "error": "The download has already started" });
+        }
+        if let Some(name) = file_name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+            e.rec.job.file_name = naming::sanitize(name);
+            e.rec.job.custom_name = true;
+        }
+        if let Some(dir) = save_dir.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+            e.rec.job.save_dir = dir.to_string();
+            e.rec.job.custom_dir = true;
+        }
+        self.save(id);
+        self.emit_job(id);
+        json!({ "ok": true })
     }
 
     fn pause(&mut self, id: u64) -> Value {
@@ -746,7 +803,8 @@ impl Actor {
                     request: e.rec.request.clone(),
                     file_name: job.file_name.clone(),
                     save_dir: PathBuf::from(&job.save_dir),
-                    category_folders: category_folders && !e.rec.request.name_decided,
+                    category_folders: category_folders && !e.rec.request.name_decided && !job.custom_dir,
+                    fixed_name: job.custom_name,
                     total: job.total_size,
                     resumable: job.resumable,
                     segments,
@@ -767,6 +825,7 @@ impl Actor {
                     save_dir: PathBuf::from(&job.save_dir),
                     tools_dir,
                     speed_limit: job.speed_limit.max(self.settings.speed_limit),
+                    file_name: job.custom_name.then(|| job.file_name.clone()),
                 };
                 let (t, c) = (transfer.clone(), cancel.clone());
                 tokio::spawn(async move {
@@ -815,8 +874,9 @@ impl Actor {
             }
             let downloaded = t.downloaded();
             if job.kind == JobKind::Video {
+                // yt-dlp knows one stream at a time; keep the menu's size until it says more.
                 let total = t.external_total.load(Ordering::Relaxed);
-                if total > 0 {
+                if total > job.total_size.unwrap_or(0) {
                     job.total_size = Some(total);
                 }
             }

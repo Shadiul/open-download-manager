@@ -198,8 +198,40 @@ fn browser_downloads_arrive_over_the_pipe() {
     let job = &list["jobs"][0];
     assert_eq!(job["fromBrowser"], true);
     let id = job["id"].as_u64().unwrap();
+    assert_eq!(job["awaitingConfirmation"], true);
+    assert_eq!(h.call(json!({ "type": "confirm", "id": id, "start": true }))["ok"], true);
     let done = h.wait_for(id, "completion", |j| j["state"] == "completed");
     assert_eq!(std::fs::read(done["filePath"].as_str().unwrap()).unwrap(), content);
     assert!(server.requests().iter().all(|r| !r.is_empty()));
+    h.stop();
+}
+
+#[test]
+fn browser_downloads_wait_for_the_new_download_window() {
+    let content = data(300 * KB, 4);
+    let (_rt, server) = server(content.clone());
+    let mut h = Harness::start(tempfile::tempdir().unwrap(), false);
+    let core = h.core.as_ref().unwrap();
+    let request: odm_core::protocol::DownloadRequest = serde_json::from_value(json!({
+        "url": server.url, "filename": "from-browser.bin", "fileSize": content.len(), "source": "browser-download"
+    }))
+    .unwrap();
+    core.runtime().block_on(core.manager().browser(vec![request])).unwrap();
+
+    let job = h.call(json!({ "type": "list" }))["jobs"][0].clone();
+    assert_eq!(job["state"], "paused");
+    assert_eq!(job["awaitingConfirmation"], true);
+    let id = job["id"].as_u64().unwrap();
+
+    let chosen = h.downloads.join("Chosen");
+    let reply = h.call(json!({ "type": "edit", "id": id, "fileName": "my name.bin", "saveDir": chosen }));
+    assert_eq!(reply["ok"], true, "{reply}");
+    assert_eq!(h.call(json!({ "type": "confirm", "id": id, "start": true }))["ok"], true);
+
+    let done = h.wait_for(id, "completion", |j| j["state"] == "completed");
+    assert_eq!(done["awaitingConfirmation"], false);
+    assert_eq!(std::path::Path::new(done["filePath"].as_str().unwrap()), chosen.join("my name.bin"));
+    assert_eq!(std::fs::read(chosen.join("my name.bin")).unwrap(), content);
+    assert_eq!(h.call(json!({ "type": "edit", "id": id, "fileName": "late.bin" }))["ok"], false);
     h.stop();
 }

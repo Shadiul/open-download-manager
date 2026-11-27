@@ -21,6 +21,8 @@ pub struct Settings {
     pub when_done: WhenDone,
     /// Check for a new yt-dlp once a day.
     pub auto_update_tools: bool,
+    /// Show the new-download window (name, size, folder) before a browser download starts.
+    pub confirm_browser_downloads: bool,
 }
 
 impl Default for Settings {
@@ -34,6 +36,7 @@ impl Default for Settings {
             schedule: Schedule::default(),
             when_done: WhenDone::Nothing,
             auto_update_tools: true,
+            confirm_browser_downloads: true,
         }
     }
 }

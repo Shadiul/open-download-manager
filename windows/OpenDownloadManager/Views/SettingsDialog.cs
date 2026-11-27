@@ -25,6 +25,7 @@ public sealed class SettingsDialog : ContentDialog
     private readonly TimePicker _start = new() { Header = "From", ClockIdentifier = "24HourClock" };
     private readonly TimePicker _stop = new() { Header = "Until", ClockIdentifier = "24HourClock" };
     private readonly ComboBox _whenDone = new() { Header = "When all downloads finish", Items = { "Do nothing", "Sleep", "Shut down" } };
+    private readonly ToggleSwitch _confirm = new() { Header = "Ask where to save each browser download before it starts" };
     private readonly ToggleSwitch _updateTools = new() { Header = "Update yt-dlp every day (sites change often)" };
     private readonly ToggleSwitch _startWithWindows = new() { Header = "Start with Windows, in the notification area" };
     private readonly ToggleSwitch _closeToTray = new() { Header = "Closing the window keeps downloads running in the notification area" };
@@ -77,7 +78,7 @@ public sealed class SettingsDialog : ContentDialog
                     Heading("Files"), folderRow, _categories,
                     Heading("Speed"), _connections, _parallel, _speed,
                     Heading("Schedule"), _schedule, times, _whenDone,
-                    Heading("Browser and video"), _hostStatus, reRegister, _updateTools, _toolsStatus, openTools,
+                    Heading("Browser and video"), _confirm, _hostStatus, reRegister, _updateTools, _toolsStatus, openTools,
                     Heading("App"), _startWithWindows, _closeToTray, _clipboard, _notifications,
                     new TextBlock { Text = $"Open Download Manager {typeof(App).Assembly.GetName().Version?.ToString(3)} · GPL-3.0", Opacity = 0.6 },
                 },
@@ -122,6 +123,7 @@ public sealed class SettingsDialog : ContentDialog
         _stop.Time = ParseTime(schedule?["stop"]?.GetValue<string>(), new TimeSpan(7, 0, 0));
         _whenDone.SelectedIndex = (_settings["whenDone"]?.GetValue<string>()) switch { "sleep" => 1, "shutdown" => 2, _ => 0 };
         _updateTools.IsOn = _settings["autoUpdateTools"]?.GetValue<bool>() ?? true;
+        _confirm.IsOn = _settings["confirmBrowserDownloads"]?.GetValue<bool>() ?? true;
 
         _startWithWindows.IsOn = _app.StartWithWindows;
         _closeToTray.IsOn = _app.CloseToTray;
@@ -168,6 +170,7 @@ public sealed class SettingsDialog : ContentDialog
             },
             whenDone = _whenDone.SelectedIndex switch { 1 => "sleep", 2 => "shutdown", _ => "nothing" },
             autoUpdateTools = _updateTools.IsOn,
+            confirmBrowserDownloads = _confirm.IsOn,
         };
         var reply = await _core.CallAsync(new { type = "setSettings", settings });
         if (reply["ok"]?.GetValue<bool>() != true)

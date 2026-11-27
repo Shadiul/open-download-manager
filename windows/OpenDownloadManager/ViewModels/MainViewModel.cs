@@ -26,6 +26,11 @@ public sealed partial class MainViewModel : ObservableObject
     public event Action<DownloadItem>? Completed;
     public event Action<DownloadItem>? Failed;
     public event Action<string>? QueueFinished;
+    /// <summary>A browser download waits for the new-download window.</summary>
+    public event Action<DownloadItem>? NeedsConfirmation;
+
+    /// <summary>Downloads still waiting from an earlier session, to ask about again.</summary>
+    public IEnumerable<DownloadItem> AwaitingConfirmation => _items.Values.Where(i => i.AwaitingConfirmation);
 
     public MainViewModel(CoreClient core, AppSettings appSettings)
     {
@@ -63,6 +68,7 @@ public sealed partial class MainViewModel : ObservableObject
                     var item = DownloadItem.From(job);
                     _items[item.Id] = item;
                     Place(item);
+                    if (item.AwaitingConfirmation) NeedsConfirmation?.Invoke(item);
                     break;
                 }
             case "jobUpdated" when ev["job"] is JsonObject job:

@@ -50,6 +50,8 @@ pub struct HttpJob {
     /// The base folder before the first response; the final folder after it.
     pub save_dir: PathBuf,
     pub category_folders: bool,
+    /// The user named the file: use `file_name` as it is, not the server's name.
+    pub fixed_name: bool,
     pub total: Option<u64>,
     pub resumable: bool,
     pub segments: Vec<SegmentRow>,
@@ -286,7 +288,11 @@ async fn run_once(
             .map(String::from)
             .or(job.request.mime.clone());
         let final_url = resp.url().to_string();
-        let name = naming::choose(disposition, Some(&job.file_name), &final_url, mime.as_deref());
+        let name = if job.fixed_name {
+            naming::sanitize(&job.file_name)
+        } else {
+            naming::choose(disposition, Some(&job.file_name), &final_url, mime.as_deref())
+        };
         let dir = if job.category_folders {
             job.save_dir.join(naming::category(&name))
         } else {

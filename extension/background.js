@@ -52,7 +52,8 @@ async function handOff(jobInput) {
   // A YouTube link (page, short, embed, youtu.be) goes over as a page for the app to extract.
   if (!YOUTUBE_ENABLED && anyPageUrl(jobInput.url)) throw new Error(YOUTUBE_OFF_MESSAGE);
   const page = pageDownloadUrl(jobInput.url);
-  if (page) jobInput = { ...jobInput, url: page, mediaKind: 'page', filename: '', mime: '', size: -1 };
+  // The size stays when the quality menu gave one for the picked format.
+  if (page) jobInput = { ...jobInput, url: page, mediaKind: 'page', filename: '', mime: '', size: jobInput.formatId ? jobInput.size : -1 };
   const job = await buildJob(jobInput);
   const reply = await sendToHost(job);
   if (!reply.ok) throw new Error(reply.error || 'Open Download Manager refused the download');

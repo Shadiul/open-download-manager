@@ -33,6 +33,7 @@ public partial class App : Application
         UnhandledException += (_, e) =>
         {
             e.Handled = true;
+            Log.Error("unhandled", e.Exception);
             _window?.ShowError($"Something went wrong: {e.Message}");
         };
     }
@@ -69,6 +70,7 @@ public partial class App : Application
             if (Settings.Notifications) Notifications.Failed(item.Id, item.DisplayName, item.Error ?? "");
         };
         _vm.QueueFinished += OnQueueFinished;
+        _vm.NeedsConfirmation += ShowNewDownload;
         _vm.Load();
 
         _window = new MainWindow(_vm);
@@ -80,6 +82,7 @@ public partial class App : Application
         };
         CreateTray();
         WatchClipboard();
+        foreach (var waiting in _vm.AwaitingConfirmation.ToList()) ShowNewDownload(waiting);
 
         var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
         if (activation.Kind == ExtendedActivationKind.AppNotification
@@ -131,6 +134,22 @@ public partial class App : Application
         _core = null;
         _window?.Close();
         Environment.Exit(0);
+    }
+
+    private void ShowNewDownload(Models.DownloadItem item)
+    {
+        if (_core is null) return;
+        try
+        {
+            new Views.NewDownloadWindow(_core, item).ShowOnTop();
+        }
+        catch (Exception e)
+        {
+            Log.Error("new-download window", e);
+            // Without the window the download must not be stuck: start it.
+            _window?.ShowError($"Could not show the new-download window: {e.Message}");
+            _ = _core.CallAsync(new { type = "confirm", id = item.Id, start = true });
+        }
     }
 
     private void CreateTray()

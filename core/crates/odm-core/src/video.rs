@@ -271,12 +271,16 @@ pub struct VideoJob {
     pub save_dir: PathBuf,
     pub tools_dir: PathBuf,
     pub speed_limit: u64,
+    /// A name the user chose, without extension; `None` uses the video's title and id.
+    pub file_name: Option<String>,
 }
 
 /// The arguments for a download; the URL goes last, after `--`.
 pub fn download_args(job: &VideoJob, identity: Identity) -> Vec<String> {
     let mut args: Vec<String> = [
         "--newline",
+        // --print makes yt-dlp quiet, which also hides progress; this brings it back.
+        "--progress",
         "--no-playlist",
         "--no-colors",
         "--encoding",
@@ -290,11 +294,15 @@ pub fn download_args(job: &VideoJob, identity: Identity) -> Vec<String> {
         "--print",
         "after_move:ODMF %(filepath)s",
         "--no-simulate",
-        "-o",
-        "%(title).150B [%(id)s].%(ext)s",
     ]
     .map(String::from)
     .into();
+    let template = match job.file_name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+        // % starts a template field in yt-dlp; a literal one is written %%.
+        Some(name) => format!("{}.%(ext)s", crate::naming::sanitize(name).replace('%', "%%")),
+        None => "%(title).150B [%(id)s].%(ext)s".into(),
+    };
+    args.extend(["-o".into(), template]);
     args.extend(["-P".into(), job.save_dir.to_string_lossy().into_owned()]);
     args.extend(["--ffmpeg-location".into(), job.tools_dir.to_string_lossy().into_owned()]);
     match job.format_id.as_deref() {
@@ -524,6 +532,7 @@ mod tests {
             save_dir: "out".into(),
             tools_dir: "tools".into(),
             speed_limit: 0,
+            file_name: None,
         };
         let args = download_args(&job, Identity::Browser);
         assert_eq!(&args[args.len() - 2..], ["--", "--exec=calc"]);

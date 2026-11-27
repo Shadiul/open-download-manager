@@ -19,12 +19,36 @@ function displayName(url) {
   } catch { return url; }
 }
 
+function matches(host, pattern) {
+  const p = pattern.trim().toLowerCase().replace(/^\*\./, '').replace(/^www\./, '');
+  return !!p && (host === p || host.endsWith('.' + p));
+}
+
+function siteExcluded(host, patterns) {
+  return patterns.some((p) => matches(host, p));
+}
+
 async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  const settings = await send({ type: 'get-settings' });
+  let settings = await send({ type: 'get-settings' });
+  const save = async (patch) => { settings = await send({ type: 'set-settings', settings: patch }); };
   $('enabled').checked = settings.enabled;
-  $('enabled').addEventListener('change', (e) => send({ type: 'set-settings', settings: { enabled: e.target.checked } }));
+  $('enabled').addEventListener('change', (e) => save({ enabled: e.target.checked }));
+  $('showVideoButton').checked = settings.showVideoButton !== false;
+  $('showVideoButton').addEventListener('change', (e) => save({ showVideoButton: e.target.checked }));
+
+  // "Use on this site" is the site's absence from the skip list, which also hides the video button there.
+  const host = (() => { try { const u = new URL(tab?.url || ''); return /^https?:$/.test(u.protocol) ? u.hostname.replace(/^www\./, '') : ''; } catch { return ''; } })();
+  if (host) {
+    $('siteRow').hidden = false;
+    $('siteName').textContent = host;
+    $('siteOn').checked = !siteExcluded(host, settings.excludedHosts || []);
+    $('siteOn').addEventListener('change', (e) => {
+      const others = (settings.excludedHosts || []).filter((h) => !matches(host, h));
+      save({ excludedHosts: e.target.checked ? others : [...others, host] });
+    });
+  }
   $('options').addEventListener('click', (e) => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
 
   send({ type: 'ping-host' }).then((r) => {

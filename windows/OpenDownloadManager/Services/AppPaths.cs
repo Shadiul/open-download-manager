@@ -2,6 +2,25 @@ using System.Runtime.InteropServices;
 
 namespace OpenDownloadManager.Services;
 
+/// <summary>Errors worth keeping for a bug report, in %LOCALAPPDATA%\OpenDownloadManager\app.log.</summary>
+public static class Log
+{
+    public static void Error(string where, Exception e)
+    {
+        try
+        {
+            Directory.CreateDirectory(AppPaths.DataDir);
+            var path = Path.Combine(AppPaths.DataDir, "app.log");
+            if (File.Exists(path) && new FileInfo(path).Length > 1_000_000) File.Delete(path);
+            File.AppendAllText(path, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {where}: {e}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Logging must never take the app down.
+        }
+    }
+}
+
 public static class AppPaths
 {
     public const string AppName = "Open Download Manager";
