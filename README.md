@@ -62,7 +62,7 @@ have the right to download: it does not get around DRM, paywalls, or logins you 
   <img src="docs/screenshots/app-dark.png" alt="The download list in dark theme" width="760">
 </p>
 <p align="center">
-  <img src="docs/screenshots/progress-window.png" alt="A download's progress window with its speed graph" width="420">
+  <img src="docs/screenshots/progress-window.png" alt="A download's progress window: its speed graph and each connection's part of the file" width="420">
 </p>
 
 ## Browser extension

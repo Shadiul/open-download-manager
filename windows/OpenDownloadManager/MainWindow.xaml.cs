@@ -20,6 +20,7 @@ public sealed partial class MainWindow : Window
     {
         ViewModel = viewModel;
         InitializeComponent();
+        ShowDensity();
         // The Pause/Resume button follows the selection and the downloads' states; a light poll
         // covers both without wiring every item.
         var pauseResume = DispatcherQueue.CreateTimer();
@@ -94,13 +95,6 @@ public sealed partial class MainWindow : Window
         ColSpeed.IsChecked = v.ShowSpeed;
         ColTimeLeft.IsChecked = v.ShowTimeLeft;
         ColAdded.IsChecked = v.ShowAdded;
-        DensityCompact.IsChecked = v.Density == "compact";
-        DensityStandard.IsChecked = v.Density == "standard";
-        DensityComfortable.IsChecked = v.Density == "comfortable";
-        ThemeSystem.IsChecked = v.Theme == "system";
-        ThemeLight.IsChecked = v.Theme == "light";
-        ThemeDark.IsChecked = v.Theme == "dark";
-        ProgressWindows.IsChecked = ViewModel.AppSettings.ShowProgressWindow;
     }
 
     private void OnColumnToggle(object sender, RoutedEventArgs e)
@@ -117,20 +111,22 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnDensityClick(object sender, RoutedEventArgs e)
+    private static readonly string[] Densities = ["compact", "standard", "comfortable"];
+
+    /// <summary>Steps to the next row density: compact, standard, comfortable, and round again.</summary>
+    private void OnDensityToggle(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { Tag: string density }) ViewSettings.Current.Density = density;
+        var v = ViewSettings.Current;
+        v.Density = Densities[(Array.IndexOf(Densities, v.Density) + 1) % Densities.Length];
+        ShowDensity();
     }
 
-    private void OnThemeClick(object sender, RoutedEventArgs e)
+    private void ShowDensity()
     {
-        if (sender is FrameworkElement { Tag: string theme }) ViewSettings.Current.Theme = theme;
-    }
-
-    private void OnProgressWindowsToggle(object sender, RoutedEventArgs e)
-    {
-        ViewModel.AppSettings.ShowProgressWindow = ProgressWindows.IsChecked;
-        try { ViewModel.AppSettings.Save(); } catch { }
+        var current = ViewSettings.Current.Density;
+        var next = Densities[(Array.IndexOf(Densities, current) + 1) % Densities.Length];
+        static string Name(string d) => char.ToUpperInvariant(d[0]) + d[1..];
+        ToolTipService.SetToolTip(DensityButton, $"Rows: {Name(current)}. Click for {Name(next)}.");
     }
 
     // ----- selection -----
@@ -170,21 +166,26 @@ public sealed partial class MainWindow : Window
 
     // ----- responsive layout -----
 
-    /// <summary>Width of the actions with their labels (Add, Pause/Resume, Remove, More).</summary>
-    private const double LabelledActionsWidth = 292;
+    /// <summary>Widths of each side of the toolbar with its labels.</summary>
+    private const double LabelledActionsWidth = 312, LabelledToolsWidth = 236;
 
     /// <summary>
-    /// The search stays centred, so each side gets half of what it leaves. The actions show their
-    /// labels when that half fits them, shrinking the search a little first; otherwise they become
+    /// The search stays centred, so each side gets half of what it leaves. Labels show where they
+    /// fit: the filter, columns and view buttons first, then the actions; otherwise those become
     /// icon buttons. Narrow windows give the search a row of its own.
     /// </summary>
     private void OnBodySizeChanged(object sender, SizeChangedEventArgs e)
     {
         var width = e.NewSize.Width;
         var narrow = width < 620;
-        var labels = false;
+        const double minSearch = 170, gap = 8;
+        bool Fits(double side) => width - 2 * (side + gap) >= minSearch;
+        bool toolLabels, actionLabels;
         if (narrow)
         {
+            // The search has its own row, so each side has the whole width to share.
+            toolLabels = width >= LabelledToolsWidth + 36 * 4 + 40;
+            actionLabels = width >= LabelledToolsWidth + LabelledActionsWidth + 16;
             Search.Width = double.NaN;
             Search.HorizontalAlignment = HorizontalAlignment.Stretch;
             Grid.SetRow(Search, 1);
@@ -193,17 +194,19 @@ public sealed partial class MainWindow : Window
         }
         else
         {
-            // Room for the search between two equal sides wide enough for the labelled actions.
-            var room = width - 2 * (LabelledActionsWidth + 8);
-            labels = room >= 170;
-            Search.Width = labels ? Math.Min(320, room) : Math.Clamp(width - 2 * 200, 160, 260);
+            toolLabels = Fits(LabelledToolsWidth);
+            actionLabels = toolLabels && Fits(Math.Max(LabelledToolsWidth, LabelledActionsWidth));
+            var side = Math.Max(toolLabels ? LabelledToolsWidth : 116, actionLabels ? LabelledActionsWidth : 180);
+            Search.Width = Math.Clamp(width - 2 * (side + gap), minSearch, 320);
             Search.HorizontalAlignment = HorizontalAlignment.Center;
             Grid.SetRow(Search, 0);
             Grid.SetColumn(Search, 1);
             Grid.SetColumnSpan(Search, 1);
         }
+        foreach (var label in new[] { LabelFilter, LabelColumns })
+            label.Visibility = toolLabels ? Visibility.Visible : Visibility.Collapsed;
         foreach (var label in new[] { LabelAdd, LabelPauseResume, LabelRemove })
-            label.Visibility = labels ? Visibility.Visible : Visibility.Collapsed;
+            label.Visibility = actionLabels ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>The list's width decides which columns fit.</summary>

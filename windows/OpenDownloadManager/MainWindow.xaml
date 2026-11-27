@@ -181,19 +181,22 @@
                             <Style TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                                 <Setter Property="Background" Value="Transparent" />
                                 <Setter Property="BorderThickness" Value="0" />
-                                <Setter Property="Padding" Value="0" />
-                                <Setter Property="Width" Value="36" />
+                                <Setter Property="Padding" Value="9,0" />
+                                <Setter Property="MinWidth" Value="36" />
                                 <Setter Property="Height" Value="34" />
                                 <Setter Property="CornerRadius" Value="4" />
                             </Style>
                         </StackPanel.Resources>
                         <Button x:Name="StatusButton" ToolTipService.ToolTip="Show: any status" AutomationProperties.Name="Filter by status">
-                            <Grid>
-                                <FontIcon Glyph="&#xE71C;" FontSize="16" />
-                                <!-- A dot while a filter is on. -->
-                                <Ellipse x:Name="StatusDot" Width="7" Height="7" Margin="0,-3,-5,0" HorizontalAlignment="Right" VerticalAlignment="Top"
-                                         Fill="{ThemeResource AccentFillColorDefaultBrush}" Visibility="Collapsed" />
-                            </Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Grid>
+                                    <FontIcon Glyph="&#xE71C;" FontSize="16" />
+                                    <!-- A dot while a filter is on. -->
+                                    <Ellipse x:Name="StatusDot" Width="7" Height="7" Margin="0,-3,-5,0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                             Fill="{ThemeResource AccentFillColorDefaultBrush}" Visibility="Collapsed" />
+                                </Grid>
+                                <TextBlock x:Name="LabelFilter" Text="Filter" />
+                            </StackPanel>
                             <Button.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedRight">
                                     <RadioMenuFlyoutItem Text="Any status" GroupName="status" Tag="any" IsChecked="True" Click="OnStatusFilterClick" />
@@ -207,7 +210,10 @@
                             </Button.Flyout>
                         </Button>
                         <Button ToolTipService.ToolTip="Columns" AutomationProperties.Name="Columns">
-                            <FontIcon Glyph="&#xE9D5;" FontSize="16" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE9D5;" FontSize="16" />
+                                <TextBlock x:Name="LabelColumns" Text="Columns" />
+                            </StackPanel>
                             <Button.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedRight" Opening="OnViewMenuOpening">
                                     <ToggleMenuFlyoutItem x:Name="ColSize" Text="Size" Click="OnColumnToggle" Tag="size" />
@@ -218,24 +224,9 @@
                                 </MenuFlyout>
                             </Button.Flyout>
                         </Button>
-                        <Button ToolTipService.ToolTip="View: density, theme, progress windows" AutomationProperties.Name="View">
-                            <FontIcon Glyph="&#xE8FD;" FontSize="16" />
-                            <Button.Flyout>
-                                <MenuFlyout x:Name="ViewMenu" Placement="BottomEdgeAlignedRight" Opening="OnViewMenuOpening">
-                                    <MenuFlyoutSubItem Text="Density">
-                                        <RadioMenuFlyoutItem x:Name="DensityCompact" Text="Compact" GroupName="density" Tag="compact" Click="OnDensityClick" />
-                                        <RadioMenuFlyoutItem x:Name="DensityStandard" Text="Standard" GroupName="density" Tag="standard" Click="OnDensityClick" />
-                                        <RadioMenuFlyoutItem x:Name="DensityComfortable" Text="Comfortable" GroupName="density" Tag="comfortable" Click="OnDensityClick" />
-                                    </MenuFlyoutSubItem>
-                                    <MenuFlyoutSubItem Text="Theme">
-                                        <RadioMenuFlyoutItem x:Name="ThemeSystem" Text="Use system setting" GroupName="theme" Tag="system" Click="OnThemeClick" />
-                                        <RadioMenuFlyoutItem x:Name="ThemeLight" Text="Light" GroupName="theme" Tag="light" Click="OnThemeClick" />
-                                        <RadioMenuFlyoutItem x:Name="ThemeDark" Text="Dark" GroupName="theme" Tag="dark" Click="OnThemeClick" />
-                                    </MenuFlyoutSubItem>
-                                    <MenuFlyoutSeparator />
-                                    <ToggleMenuFlyoutItem x:Name="ProgressWindows" Text="Open a progress window for each download" Click="OnProgressWindowsToggle" />
-                                </MenuFlyout>
-                            </Button.Flyout>
+                        <!-- One click steps through the row densities; theme and the rest live in Settings. -->
+                        <Button x:Name="DensityButton" Click="OnDensityToggle" AutomationProperties.Name="Row density">
+                            <FontIcon x:Name="DensityIcon" Glyph="&#xE8FD;" FontSize="16" />
                         </Button>
                     </StackPanel>
                 </Grid>
