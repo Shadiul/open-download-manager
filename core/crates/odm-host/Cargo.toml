@@ -1,0 +1,15 @@
+[package]
+name = "odm-host"
+description = "Native messaging host that relays between the browser extension and the Open Download Manager app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+odm-core.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -39,6 +39,9 @@ native-host/
   test_host.py      a stand-in host that accepts everything and logs to received.jsonl
   install-windows.ps1  registers the host for Chrome and Edge (current user)
 tests/              unit tests and a Chromium end-to-end test
+core/               the shared Rust core (Cargo workspace)
+  crates/odm-core   protocol types, message framing, segment planning, job states
+  crates/odm-host   the native messaging host (answers on its own until the desktop app exists)
 ```
 
 ## Try it on Windows
@@ -59,6 +62,14 @@ npm install         # once, for the end-to-end test
 npm test            # unit tests, no browser needed
 npm run build       # dist/edge and dist/chrome, plus a zip of each
 npm run test:e2e    # builds, then loads the extension in Playwright's Chromium with the test host
+```
+
+The Rust core (needs Rust 1.85 or later; on Windows, the MSVC build tools):
+
+```
+cd core
+cargo test --workspace
+cargo build --release -p odm-host   # target/release/odm-host.exe
 ```
 
 ## Two builds: Edge and Chrome
