@@ -37,6 +37,7 @@ public sealed partial class MainWindow : Window
                 ShowError(message);
             if (e.PropertyName is nameof(MainViewModel.SortBy) or nameof(MainViewModel.SortDescending))
                 ShowSortArrows();
+            if (e.PropertyName == nameof(MainViewModel.CheckedCount)) ShowChecked();
         };
         ViewSettings.Current.Track(this);
         ShowSortArrows();
@@ -122,17 +123,37 @@ public sealed partial class MainWindow : Window
 
     // ----- selection -----
 
-    private void OnSelectAllClick(object sender, RoutedEventArgs e)
+    private void OnSelectAllClick(object sender, RoutedEventArgs e) => ViewModel.CheckAll(SelectAll.IsChecked == true);
+
+    private void ShowChecked()
     {
-        if (SelectAll.IsChecked == true) List.SelectAll();
-        else List.SelectedItems.Clear();
+        var n = ViewModel.CheckedCount;
+        SelectionText.Text = n == 0 ? "" : n == 1 ? "1 checked · Esc to clear" : $"{n} checked · Esc to clear";
+        SelectAll.IsChecked = n == 0 ? false : n >= ViewModel.Visible.Count ? true : null;
     }
 
-    private void OnListSelectionChanged(object sender, SelectionChangedEventArgs e)
+    /// <summary>
+    /// A click only highlights the row, unless something is already checked: then it checks or
+    /// unchecks the row, as in Gmail or Files.
+    /// </summary>
+    private void OnItemClick(object sender, ItemClickEventArgs e)
     {
-        var n = List.SelectedItems.Count;
-        SelectionText.Text = n == 0 ? "" : n == 1 ? "1 checked" : $"{n} checked";
-        SelectAll.IsChecked = n == 0 ? false : n == ViewModel.Visible.Count ? true : null;
+        if (ViewModel.CheckedCount > 0 && e.ClickedItem is DownloadItem item) item.IsChecked = !item.IsChecked;
+    }
+
+    /// <summary>Space checks the highlighted row; Esc clears all checks.</summary>
+    private void OnListKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Space && List.SelectedItem is DownloadItem item)
+        {
+            item.IsChecked = !item.IsChecked;
+            e.Handled = true;
+        }
+        else if (e.Key == Windows.System.VirtualKey.Escape && ViewModel.CheckedCount > 0)
+        {
+            ViewModel.CheckAll(false);
+            e.Handled = true;
+        }
     }
 
     // ----- responsive layout -----
@@ -183,7 +204,10 @@ public sealed partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hwnd);
 
-    private IEnumerable<DownloadItem> Selected => List.SelectedItems.OfType<DownloadItem>().ToList();
+    /// <summary>The checked downloads, or the highlighted one when nothing is checked.</summary>
+    private IEnumerable<DownloadItem> Selected =>
+        ViewModel.CheckedCount > 0 ? ViewModel.Checked
+        : List.SelectedItem is DownloadItem one ? [one] : [];
 
     private static DownloadItem? ItemOf(object sender) => (sender as FrameworkElement)?.DataContext as DownloadItem;
 

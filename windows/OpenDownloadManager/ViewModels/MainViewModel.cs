@@ -31,6 +31,25 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] public partial bool IsEmpty { get; set; } = true;
     [ObservableProperty] public partial string EmptyTitle { get; set; } = "No downloads here yet";
     [ObservableProperty] public partial string? ErrorText { get; set; }
+    /// <summary>How many downloads are checked. While any are, a click on a row checks it too.</summary>
+    [ObservableProperty] public partial int CheckedCount { get; set; }
+
+    public List<DownloadItem> Checked => Visible.Where(i => i.IsChecked).ToList();
+
+    public void CheckAll(bool on)
+    {
+        foreach (var item in Visible) item.IsChecked = on;
+    }
+
+    private void Track(DownloadItem item)
+    {
+        item.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(DownloadItem.IsChecked)) CountChecked();
+        };
+    }
+
+    private void CountChecked() => CheckedCount = _items.Values.Count(i => i.IsChecked);
 
     public event Action<DownloadItem>? Completed;
     public event Action<DownloadItem>? Failed;
@@ -65,6 +84,7 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 var item = DownloadItem.From(job);
                 _items[item.Id] = item;
+                Track(item);
             }
         }
         Refilter();
@@ -104,6 +124,7 @@ public sealed partial class MainViewModel : ObservableObject
                 {
                     var item = DownloadItem.From(job);
                     _items[item.Id] = item;
+                    Track(item);
                     Place(item);
                     if (item.AwaitingConfirmation) NeedsConfirmation?.Invoke(item);
                     break;
@@ -115,6 +136,7 @@ public sealed partial class MainViewModel : ObservableObject
                     {
                         item = DownloadItem.From(job);
                         _items[id] = item;
+                        Track(item);
                         Place(item);
                         break;
                     }
@@ -133,6 +155,7 @@ public sealed partial class MainViewModel : ObservableObject
                 {
                     var id = (ulong)(ev["id"]?.GetValue<long>() ?? 0);
                     if (_items.Remove(id, out var item)) Visible.Remove(item);
+                    CountChecked();
                     break;
                 }
             case "queueFinished":
@@ -192,6 +215,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void Refilter()
     {
+        // Hidden rows are unchecked, so an action never touches downloads you cannot see.
+        foreach (var hidden in _items.Values.Where(i => i.IsChecked && !Matches(i))) hidden.IsChecked = false;
         var keep = _items.Values.Where(Matches).ToList();
         keep.Sort(Compare);
         Visible.Clear();
@@ -206,6 +231,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (!Matches(item))
         {
             if (at >= 0) Visible.RemoveAt(at);
+            item.IsChecked = false;
             return;
         }
         var index = 0;

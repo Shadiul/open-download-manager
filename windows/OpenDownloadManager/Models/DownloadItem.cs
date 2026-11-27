@@ -27,6 +27,8 @@ public sealed partial class DownloadItem : ObservableObject
     [ObservableProperty] public partial long Position { get; set; }
     [ObservableProperty] public partial long CreatedAt { get; set; }
     [ObservableProperty] public partial bool AwaitingConfirmation { get; set; }
+    /// <summary>Checked in the list, for actions on several downloads at once.</summary>
+    [ObservableProperty] public partial bool IsChecked { get; set; }
     /// <summary>The file's thumbnail or its type's icon, loaded in the background.</summary>
     [ObservableProperty] public partial ImageSource? Icon { get; set; }
 

@@ -242,11 +242,12 @@
                     x:Name="List"
                     Grid.Row="4"
                     ItemsSource="{x:Bind ViewModel.Visible}"
-                    SelectionMode="Multiple"
-                    IsMultiSelectCheckBoxEnabled="True"
+                    SelectionMode="Single"
+                    IsItemClickEnabled="True"
+                    ItemClick="OnItemClick"
                     IsDoubleTapEnabled="True"
                     DoubleTapped="OnItemDoubleTapped"
-                    SelectionChanged="OnListSelectionChanged"
+                    KeyDown="OnListKeyDown"
                     SizeChanged="OnListSizeChanged">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
@@ -290,16 +291,22 @@
                                 <Grid ColumnSpacing="10">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Grid Width="{x:Bind services:ViewSettings.Current.IconSize, Mode=OneWay}"
+                                    <!-- Checking is separate from clicking: a click on the row only checks it
+                                         once something is already checked (see OnItemClick). -->
+                                    <CheckBox MinWidth="0" Width="20" Padding="0" VerticalAlignment="Center"
+                                              IsChecked="{x:Bind IsChecked, Mode=TwoWay}"
+                                              AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}" />
+                                    <Grid Grid.Column="1" Width="{x:Bind services:ViewSettings.Current.IconSize, Mode=OneWay}"
                                           Height="{x:Bind services:ViewSettings.Current.IconSize, Mode=OneWay}" VerticalAlignment="Center">
                                         <FontIcon Glyph="{x:Bind Glyph, Mode=OneWay}" FontSize="16"
                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                   Visibility="{x:Bind NoIcon, Mode=OneWay}" />
                                         <Image Source="{x:Bind Icon, Mode=OneWay}" Stretch="Uniform" />
                                     </Grid>
-                                    <TextBlock Grid.Column="1" Text="{x:Bind DisplayName, Mode=OneWay}" VerticalAlignment="Center"
+                                    <TextBlock Grid.Column="2" Text="{x:Bind DisplayName, Mode=OneWay}" VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" MaxLines="1"
                                                FontSize="{x:Bind services:ViewSettings.Current.RowFontSize, Mode=OneWay}" />
                                 </Grid>
