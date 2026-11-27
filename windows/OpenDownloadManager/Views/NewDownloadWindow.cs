@@ -31,6 +31,7 @@ public sealed class NewDownloadWindow : Window
     private readonly TextBlock _progress = new() { Style = ThemedStyles.Text(caption: true, secondary: true) };
     private string _originalNameShown = "";
     private bool _decided;
+    private Button _start = null!, _later = null!;
 
     public NewDownloadWindow(CoreClient core, DownloadItem item)
     {
@@ -88,8 +89,8 @@ public sealed class NewDownloadWindow : Window
         });
         ToolTipService.SetToolTip(header, item.Url);
 
-        var start = new Button { Content = "Download", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
-        var later = new Button { Content = "Download later" };
+        var start = _start = new Button { Content = "Download", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        var later = _later = new Button { Content = "Download later" };
         var cancel = new Button { Content = "Cancel" };
         start.Click += async (_, _) => await Decide(startNow: true);
         later.Click += async (_, _) => await Decide(startNow: false);
@@ -107,7 +108,8 @@ public sealed class NewDownloadWindow : Window
         };
 
         AppWindow.SetIcon(AppPaths.IconPath);
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(600, 360));
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(600, 380));
+        if (Content is FrameworkElement root) root.Loaded += (_, _) => FitHeight();
         // A dark title bar in dark mode, like the rest of the window.
         AppWindow.TitleBar.PreferredTheme = TitleBarTheme.UseDefaultAppMode;
         if (AppWindow.Presenter is OverlappedPresenter p)
@@ -146,16 +148,34 @@ public sealed class NewDownloadWindow : Window
         {
             "connecting" => "Connecting…",
             "downloading" => string.Join(" · ", new[] { $"Downloading: {_item.ProgressText}", _item.SpeedText }.Where(t => t.Length > 0)),
-            "completed" => "Downloaded",
+            "completed" => "Downloaded. A new name or folder moves the file.",
             "failed" => _item.Error ?? "Failed",
             _ => "",
         };
+        // Finished before the user answered: the main button keeps the choices and closes.
+        var done = _item.State == "completed";
+        if (_start is not null)
+        {
+            _start.Content = done ? "Done" : "Download";
+            _later.Visibility = done ? Visibility.Collapsed : Visibility.Visible;
+        }
         // The server's name, once known, replaces the guess, unless the user has typed their own.
         if (!video && _item.FileName != _originalNameShown && _name.Text == _originalNameShown)
         {
             _originalNameShown = _item.FileName;
             _name.Text = _item.FileName;
         }
+    }
+
+    /// <summary>Makes the window exactly as tall as its content, so the buttons always show.</summary>
+    private void FitHeight()
+    {
+        if (Content is not FrameworkElement root || root.XamlRoot is null) return;
+        var scale = root.XamlRoot.RasterizationScale;
+        root.Measure(new Windows.Foundation.Size(AppWindow.ClientSize.Width / scale, double.PositiveInfinity));
+        var height = (int)Math.Ceiling(root.DesiredSize.Height * scale);
+        if (height > 0 && height != AppWindow.ClientSize.Height)
+            AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(AppWindow.ClientSize.Width, height));
     }
 
     private string _defaultFolderFor(string name) => DefaultFolder(_core, _item, _baseFolder, name);
@@ -231,6 +251,7 @@ public sealed class NewDownloadWindow : Window
         if (reply["ok"]?.GetValue<bool>() == true) return true;
         _error.Text = reply["error"]?.GetValue<string>() ?? "Something went wrong.";
         _error.Visibility = Visibility.Visible;
+        FitHeight();
         return false;
     }
 

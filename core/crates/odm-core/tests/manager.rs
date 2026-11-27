@@ -258,7 +258,13 @@ fn browser_downloads_start_while_the_new_download_window_asks() {
     let leftovers: Vec<_> =
         walk(&h.downloads).into_iter().filter(|p| p.extension().is_some_and(|e| e == "part")).collect();
     assert!(leftovers.is_empty(), "{leftovers:?}");
-    assert_eq!(h.call(json!({ "type": "edit", "id": id, "fileName": "late.bin" }))["ok"], false);
+    // Once finished, a new name moves the file itself.
+    let moved = h.call(json!({ "type": "edit", "id": id, "fileName": "late.bin" }));
+    assert_eq!(moved["ok"], true, "{moved}");
+    let done = h.job(id);
+    assert_eq!(std::path::Path::new(done["filePath"].as_str().unwrap()), chosen.join("late.bin"));
+    assert_eq!(std::fs::read(chosen.join("late.bin")).unwrap(), content);
+    assert!(!chosen.join("my name.bin").exists());
     h.stop();
 }
 

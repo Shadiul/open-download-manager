@@ -700,7 +700,15 @@ impl Actor {
             return json!({ "ok": false, "error": "No such download" });
         };
         if e.rec.job.state == JobState::Completed {
-            return json!({ "ok": false, "error": "The download has already finished" });
+            // Small files often finish before the new-download window is answered: the finished
+            // file moves to the chosen name and folder.
+            let result = move_finished(&mut e.rec, file_name, save_dir);
+            self.save(id);
+            self.emit_job(id);
+            return match result {
+                Ok(()) => json!({ "ok": true }),
+                Err(error) => json!({ "ok": false, "error": error }),
+            };
         }
         if let Some(run) = &mut e.run {
             // Stop it, move what it has so far, and go on from there (see `finished`).
@@ -1102,6 +1110,38 @@ fn apply_edit(
     job.save_dir = new_dir;
     job.custom_name |= name.is_some();
     job.custom_dir |= dir.is_some();
+    Ok(())
+}
+
+/// Gives a finished download a new name or folder, moving its file.
+fn move_finished(
+    rec: &mut JobRecord,
+    file_name: Option<String>,
+    save_dir: Option<String>,
+) -> Result<(), String> {
+    let job = &mut rec.job;
+    let name = file_name.as_deref().map(str::trim).filter(|n| !n.is_empty()).map(naming::sanitize);
+    let dir = save_dir.as_deref().map(str::trim).filter(|d| !d.is_empty()).map(String::from);
+    if name.is_none() && dir.is_none() {
+        return Ok(());
+    }
+    let Some(from) = job.file_path.clone().map(PathBuf::from) else {
+        return Err("The finished file is not known".into());
+    };
+    let new_name = name.unwrap_or_else(|| job.file_name.clone());
+    let new_dir = PathBuf::from(dir.unwrap_or_else(|| job.save_dir.clone()));
+    if new_dir.join(&new_name) == from {
+        return Ok(());
+    }
+    std::fs::create_dir_all(&new_dir)
+        .map_err(|e| format!("Cannot create folder {}: {e}", new_dir.display()))?;
+    let to = naming::unique_path(&new_dir, &new_name);
+    move_file(&from, &to).map_err(|e| format!("Cannot move the file to {}: {e}", to.display()))?;
+    job.file_name = to.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(new_name);
+    job.save_dir = new_dir.to_string_lossy().into_owned();
+    job.file_path = Some(to.to_string_lossy().into_owned());
+    job.custom_name = true;
+    job.custom_dir = true;
     Ok(())
 }
 
