@@ -44,7 +44,8 @@ public partial class App : Application
         _ui = DispatcherQueue.GetForCurrentThread();
         ViewSettings.Current.Load(Settings);
         Notifications.Invoked += a => _ui.TryEnqueue(() => OnNotification(a));
-        Notifications.Register();
+        var profile = AppPaths.Profile;
+        if (profile is null) Notifications.Register();
 
         try
         {
@@ -54,6 +55,7 @@ public partial class App : Application
                 defaultDownloadDir = AppPaths.DownloadsDir,
                 toolsDir = AppPaths.ToolsDir,
                 listen = true,
+                endpoint = profile is null ? null : $@"\\.\pipe\OpenDownloadManager-{Environment.UserName}-{profile}",
             }, _ui);
         }
         catch (Exception e)
@@ -62,8 +64,11 @@ public partial class App : Application
             return;
         }
 
-        try { NativeHostRegistration.Register(); } catch { /* shown in Settings as not registered */ }
-        try { StartupRegistration.Apply(Settings.StartWithWindows); } catch { }
+        if (profile is null)
+        {
+            try { NativeHostRegistration.Register(); } catch { /* shown in Settings as not registered */ }
+            try { StartupRegistration.Apply(Settings.StartWithWindows); } catch { }
+        }
 
         _vm = new MainViewModel(_core, Settings);
         _vm.Completed += OnCompleted;
@@ -75,7 +80,8 @@ public partial class App : Application
         _vm.NeedsConfirmation += ShowNewDownload;
         _vm.Started += item =>
         {
-            if (Settings.ShowProgressWindow) ShowProgressWindow(item);
+            // While the new-download window asks, it shows the progress itself; the progress window follows the answer.
+            if (Settings.ShowProgressWindow && !item.AwaitingConfirmation) ShowProgressWindow(item);
         };
         _vm.Load();
 
@@ -113,10 +119,11 @@ public partial class App : Application
                 OnNotification(toast.Arguments);
                 return;
             }
-            var background = args.Kind == ExtendedActivationKind.Launch
-                && args.Data is ILaunchActivatedEventArgs launch
-                && (launch.Arguments ?? "").Contains("--background");
-            if (!background) ShowWindow();
+            var launchArgs = args.Kind == ExtendedActivationKind.Launch && args.Data is ILaunchActivatedEventArgs launch
+                ? launch.Arguments ?? ""
+                : "";
+            if (launchArgs.Contains("--quit")) { Quit(); return; }
+            if (!launchArgs.Contains("--background")) ShowWindow();
         });
     }
 
@@ -134,8 +141,9 @@ public partial class App : Application
         _exiting = true;
         _tray?.Dispose();
         _tray = null;
-        Notifications.Unregister();
+        if (AppPaths.Profile is null) Notifications.Unregister();
         Power.KeepAwake(false);
+        SpeedHistory.Save();
         _core?.Dispose();
         _core = null;
         _window?.Close();

@@ -49,6 +49,10 @@ async function buildJob({ url, filename, referrer, mime, size, source, mediaKind
   };
 }
 
+// Matches how long the app keeps a video's page details for starting its download quickly.
+const PROBE_CACHE_MS = 20 * 60 * 1000;
+const probing = new Map();
+
 async function handOff(jobInput) {
   // A YouTube link (page, short, embed, youtu.be) goes over as a page for the app to extract.
   if (!YOUTUBE_ENABLED && anyPageUrl(jobInput.url)) throw new Error(YOUTUBE_OFF_MESSAGE);
@@ -373,12 +377,28 @@ async function handleMessage(msg, sender) {
       // Asks the desktop app which qualities a YouTube video has, for the menu near the player.
       const url = pageDownloadUrl(msg.url) || postUrl(msg.url);
       if (!url) return { ok: false, error: anyPageUrl(msg.url) && !YOUTUBE_ENABLED ? YOUTUBE_OFF_MESSAGE : 'Not a supported video page' };
-      try {
-        const reply = await sendToHost({ type: 'probe', url, cookies: await cookieHeader(url), userAgent: navigator.userAgent }, 30000);
-        return reply.ok ? { ok: true, url, title: reply.title || '', formats: reply.formats || [] } : { ok: false, url, error: reply.error };
-      } catch (e) {
-        return { ok: false, url, error: e.message };
+      // A video's qualities rarely change: keep them for a while so the menu opens at once.
+      const key = `probe:${url}`;
+      const cached = (await chrome.storage.session.get(key))[key];
+      if (cached && Date.now() - cached.at < PROBE_CACHE_MS) return cached.reply;
+      // One request per video at a time: an early fetch (popup opened, pointer on the button) and
+      // the click share it.
+      if (!probing.has(url)) {
+        probing.set(url, (async () => {
+          try {
+            const reply = await sendToHost({ type: 'probe', url, cookies: await cookieHeader(url), userAgent: navigator.userAgent }, 30000);
+            if (!reply.ok) return { ok: false, url, error: reply.error };
+            const result = { ok: true, url, title: reply.title || '', formats: reply.formats || [] };
+            await chrome.storage.session.set({ [key]: { at: Date.now(), reply: result } });
+            return result;
+          } catch (e) {
+            return { ok: false, url, error: e.message };
+          } finally {
+            probing.delete(url);
+          }
+        })());
       }
+      return probing.get(url);
     }
 
     case 'send-media': {

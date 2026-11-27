@@ -11,7 +11,8 @@ namespace OpenDownloadManager;
 /// </summary>
 public static class Program
 {
-    private const string InstanceKey = "OpenDownloadManager-main";
+    private static readonly string InstanceKey =
+        "OpenDownloadManager-main" + (Services.AppPaths.Profile is { } p ? "-" + p : "");
 
     [STAThread]
     private static int Main(string[] args)
@@ -34,6 +35,8 @@ public static class Program
         var main = AppInstance.FindOrRegisterForKey(InstanceKey);
         if (main.IsCurrent)
         {
+            // "--quit" closes a running copy (the installer uses it); with none running there is nothing to do.
+            if (Environment.GetCommandLineArgs().Contains("--quit")) return true;
             main.Activated += (_, e) => App.Current?.OnRedirectedActivation(e);
             return false;
         }

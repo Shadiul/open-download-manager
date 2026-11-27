@@ -5,11 +5,12 @@
 //! read from a fixed progress template on its output. yt-dlp and ffmpeg are always started with
 //! argument lists, never through a shell, and the URL always follows `--`.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::sync::{Arc, LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -23,10 +24,56 @@ use crate::protocol::{Format, MediaKind};
 /// The quality-menu id that downloads the best audio and converts it to MP3.
 pub const MP3_FORMAT: &str = "audio-mp3";
 const PROBE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How long a quality menu's page details stay good for starting the download from them. Stream
+/// addresses inside last hours; this stays well short of that.
+const INFO_TTL: Duration = Duration::from_secs(20 * 60);
+
+/// The page details (yt-dlp's info JSON) each quality menu fetched, by page address. Picking a
+/// quality then starts the download from them with `--load-info-json`, skipping the seconds yt-dlp
+/// spends reading the page again.
+type InfoCache = HashMap<String, (Instant, Identity, PathBuf)>;
+static INFO: LazyLock<Mutex<InfoCache>> = LazyLock::new(Default::default);
+
+fn info_cache() -> std::sync::MutexGuard<'static, InfoCache> {
+    INFO.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+fn remember_info(url: &str, identity: Identity, json: &[u8]) {
+    use std::hash::{Hash, Hasher};
+    let dir = std::env::temp_dir().join("OpenDownloadManager-video-info");
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    url.hash(&mut h);
+    let path = dir.join(format!("{:016x}.json", h.finish()));
+    if std::fs::write(&path, json).is_ok() {
+        let mut cache = info_cache();
+        cache.retain(|_, (at, _, _)| at.elapsed() < INFO_TTL);
+        cache.insert(url.to_string(), (Instant::now(), identity, path));
+    }
+}
+
+/// Fresh page details for this address, fetched the same way (with or without cookies).
+fn cached_info(url: &str, identity: Identity) -> Option<PathBuf> {
+    let cache = info_cache();
+    let (at, id, path) = cache.get(url)?;
+    (at.elapsed() < INFO_TTL && *id == identity && path.exists()).then(|| path.clone())
+}
+
+fn forget_info(url: &str) {
+    if let Some((_, _, path)) = info_cache().remove(url) {
+        let _ = std::fs::remove_file(path);
+    }
+}
 const MENU_HEIGHTS: usize = 6;
 
 pub fn tool_path(tools_dir: &Path, name: &str) -> PathBuf {
-    if cfg!(windows) { tools_dir.join(format!("{name}.exe")) } else { tools_dir.join(name) }
+    let file = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
+    // A tool shipped as a folder build (yt-dlp: it starts faster than the one-file build).
+    let in_folder = tools_dir.join(name).join(&file);
+    if in_folder.exists() { in_folder } else { tools_dir.join(file) }
 }
 
 fn command(program: &Path) -> Command {
@@ -152,6 +199,7 @@ async fn probe_as(
     }
     let info: Value =
         serde_json::from_slice(&output.stdout).map_err(|e| format!("yt-dlp gave bad JSON: {e}"))?;
+    remember_info(url, identity, &output.stdout);
     Ok(ProbeResult {
         title: info["title"].as_str().unwrap_or_default().to_string(),
         formats: build_menu(&info),
@@ -340,13 +388,27 @@ fn parse_progress(line: &str) -> Option<(u64, Option<u64>)> {
 /// Runs yt-dlp until the file is saved, it fails, or `cancel` fires.
 pub async fn run(job: VideoJob, transfer: Arc<Transfer>, cancel: CancellationToken) -> Outcome {
     let first = Identity::first_for(job.media_kind);
-    match run_as(&job, &transfer, &cancel, first).await {
+    // Straight from the quality menu's page details when they are fresh; if those are stale after
+    // all (an address that expired), read the page again.
+    let outcome = match cached_info(&job.url, first) {
+        Some(info) => match run_as(&job, &transfer, &cancel, first, Some(&info)).await {
+            Outcome::Failed { .. } if !cancel.is_cancelled() => {
+                forget_info(&job.url);
+                transfer.external_downloaded.store(0, Ordering::Relaxed);
+                transfer.external_total.store(0, Ordering::Relaxed);
+                run_as(&job, &transfer, &cancel, first, None).await
+            }
+            other => other,
+        },
+        None => run_as(&job, &transfer, &cancel, first, None).await,
+    };
+    match outcome {
         Outcome::Failed { error, .. }
             if first == Identity::Anonymous && needs_login(&error) && has_cookies(&job.request) =>
         {
             transfer.external_downloaded.store(0, Ordering::Relaxed);
             transfer.external_total.store(0, Ordering::Relaxed);
-            run_as(&job, &transfer, &cancel, Identity::Browser).await
+            run_as(&job, &transfer, &cancel, Identity::Browser, None).await
         }
         other => other,
     }
@@ -357,6 +419,7 @@ async fn run_as(
     transfer: &Transfer,
     cancel: &CancellationToken,
     identity: Identity,
+    info: Option<&Path>,
 ) -> Outcome {
     let ytdlp = tool_path(&job.tools_dir, "yt-dlp");
     if !ytdlp.exists() {
@@ -369,7 +432,13 @@ async fn run_as(
         return Outcome::Failed { error: format!("Cannot create folder: {e}"), link_expired: false };
     }
     let mut cmd = command(&ytdlp);
-    cmd.args(download_args(job, identity)).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut args = download_args(job, identity);
+    if let Some(info) = info {
+        // In place of "-- <page>": the details already fetched.
+        args.truncate(args.len() - 2);
+        args.extend(["--load-info-json".into(), info.to_string_lossy().into_owned()]);
+    }
+    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => return Outcome::Failed { error: format!("Cannot start yt-dlp: {e}"), link_expired: false },

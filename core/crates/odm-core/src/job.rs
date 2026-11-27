@@ -132,12 +132,20 @@ pub struct RequestContext {
     pub last_modified: Option<String>,
     /// The file name was settled by the first response (and the `.part` file exists).
     pub name_decided: bool,
+    /// The address redirects to mirrors on other hosts. Each mirror has its own ETag for the same
+    /// file, so `If-Range` uses the date, which mirrors keep, instead.
+    pub mirrored: bool,
 }
 
 impl RequestContext {
-    /// The `If-Range` value: a strong ETag, else the Last-Modified date.
+    /// The `If-Range` value: a strong ETag, else the Last-Modified date (always the date for
+    /// mirrored files, when there is one).
     pub fn if_range(&self) -> Option<&str> {
-        self.etag.as_deref().filter(|e| !e.starts_with("W/")).or(self.last_modified.as_deref())
+        let etag = self.etag.as_deref().filter(|e| !e.starts_with("W/"));
+        if self.mirrored && self.last_modified.is_some() {
+            return self.last_modified.as_deref();
+        }
+        etag.or(self.last_modified.as_deref())
     }
 }
 
@@ -179,5 +187,14 @@ mod tests {
         assert_eq!(ctx.if_range(), ctx.last_modified.as_deref());
         ctx.etag = Some("\"abc\"".into());
         assert_eq!(ctx.if_range(), Some("\"abc\""));
+    }
+
+    #[test]
+    fn mirrored_files_resume_by_date() {
+        let mut ctx =
+            RequestContext { etag: Some("\"mirror-a\"".into()), mirrored: true, ..Default::default() };
+        assert_eq!(ctx.if_range(), Some("\"mirror-a\""), "the ETag when there is no date");
+        ctx.last_modified = Some("Sat, 08 Jun 2024 23:35:39 GMT".into());
+        assert_eq!(ctx.if_range(), ctx.last_modified.as_deref());
     }
 }

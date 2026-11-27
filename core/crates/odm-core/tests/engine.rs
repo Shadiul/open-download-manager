@@ -270,3 +270,28 @@ async fn speed_limit_holds() {
     let took = start.elapsed().as_secs_f64();
     assert!(took > 0.7, "400 KB at 400 KB/s took only {took} s");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_restart_keeps_the_category_folder_single() {
+    let behaviour = Behaviour {
+        ranges: true,
+        content_length: true,
+        disposition: Some("attachment; filename=\"setup.exe\"".into()),
+        ..Default::default()
+    };
+    let server = Server::start(data(KB * KB, 3), behaviour).await;
+    server.behaviour.rate.store(800 * KB as u64, Ordering::SeqCst);
+    let dir = tempfile::tempdir().unwrap();
+    let mut j = job(&server.url, dir.path(), 2);
+    j.category_folders = true;
+    let transfer = Arc::new(Transfer::default());
+    let handle = tokio::spawn(engine::run(j, env(), transfer.clone(), CancellationToken::new()));
+    while transfer.downloaded() < 100 * KB as u64 {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    // The file changes while it downloads: the engine starts over, in the same folder.
+    server.change(data(1100 * KB, 4));
+    server.behaviour.rate.store(0, Ordering::SeqCst);
+    let outcome = handle.await.unwrap();
+    assert_eq!(completed(&outcome), dir.path().join("Programs").join("setup.exe"));
+}

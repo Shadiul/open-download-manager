@@ -150,6 +150,14 @@
     menu.hidden = true;
     root.append(bar, menu);
     button.addEventListener('click', onButton);
+    // Fetch the video's details as the pointer arrives: the menu, and the download, start sooner.
+    button.addEventListener('mouseenter', () => {
+      const page = target && permalinkOf(target);
+      if (page && !prefetched.has(page)) {
+        prefetched.add(page);
+        send({ type: 'probe-page', url: page });
+      }
+    });
     root.addEventListener('mouseenter', () => clearTimeout(hideTimer));
     root.addEventListener('mouseleave', scheduleHide);
     // Keep the page's player from treating our clicks as play/pause.
@@ -196,6 +204,8 @@
   }
 
   const note = (text) => Object.assign(document.createElement('div'), { className: 'odm-note', textContent: text, title: text });
+
+  const prefetched = new Set();
 
   async function onButton() {
     if (menuOpen) return closeMenu();

@@ -43,8 +43,9 @@ public sealed class DownloadWindow : Window
     private readonly FontIcon _detailsChevron = new() { Glyph = "", FontSize = 10 };
     private readonly TextBlock _detailsLabel = new() { Text = "More details" };
     private readonly StackPanel _details = new() { Spacing = 8, Visibility = Visibility.Collapsed };
-    private readonly Grid _map = new() { Height = 8 };
-    private readonly StackPanel _parts = new() { Spacing = 10 };
+    private readonly Grid _map = new() { Height = 6, CornerRadius = new CornerRadius(3) };
+    private readonly StackPanel _parts = new() { Spacing = 12 };
+    private readonly TextBlock _connSummary = Text(caption: true, secondary: true);
     private readonly StackPanel _buttons = new() { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
     private readonly Button _open = new() { Content = "Open" };
     private readonly Button _folder = new() { Content = "Show in folder" };
@@ -93,8 +94,7 @@ public sealed class DownloadWindow : Window
         {
             Height = 92,
             BorderThickness = new Thickness(1),
-            BorderBrush = Res<Brush>("CardStrokeColorDefaultBrush"),
-            Background = Res<Brush>("CardBackgroundFillColorSecondaryBrush"),
+            Style = CardStyle,
             Child = _graph,
         };
         _graphFrame.SizeChanged += (_, _) => BuildGraph();
@@ -115,23 +115,23 @@ public sealed class DownloadWindow : Window
         };
         _detailsToggle.Click += (_, _) => SetExpanded(!_expanded);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_detailsToggle, "More details");
-        var mapFrame = new Border { CornerRadius = new CornerRadius(2), Background = Res<Brush>("ControlStrokeColorDefaultBrush"), Child = _map };
-        ToolTipService.SetToolTip(mapFrame, "What each connection has fetched, across the whole file");
+        ToolTipService.SetToolTip(_map, "The whole file: each chunk is one connection's part, filled as it arrives");
+        _connSummary.HorizontalAlignment = HorizontalAlignment.Right;
         _details.Children.Add(new Grid
         {
             Children =
             {
                 Text(caption: true, secondary: true, text: "Connections"),
+                _connSummary,
             },
         });
-        _details.Children.Add(mapFrame);
+        _details.Children.Add(_map);
         _details.Children.Add(new Border
         {
             Height = 168,
             CornerRadius = new CornerRadius(4),
             BorderThickness = new Thickness(1),
-            BorderBrush = Res<Brush>("CardStrokeColorDefaultBrush"),
-            Background = Res<Brush>("CardBackgroundFillColorSecondaryBrush"),
+            Style = CardStyle,
             Child = new ScrollViewer { Content = _parts, Padding = new Thickness(12, 10, 16, 10), VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
         });
 
@@ -173,24 +173,45 @@ public sealed class DownloadWindow : Window
         _timer.Interval = TimeSpan.FromMilliseconds(700);
         _timer.Tick += async (_, _) => await Poll();
 
+        ThemeColors.Changed += OnThemeChanged;
         Closed += (_, _) =>
         {
+            ThemeColors.Changed -= OnThemeChanged;
             _timer.Stop();
             StopAnimation();
             _item.PropertyChanged -= OnItemChanged;
         };
+        // The graph starts with what was recorded before this window opened.
+        var history = SpeedHistory.Get(_item.Id);
+        if (history.Count > 0 && _item.TotalSize is > 0)
+        {
+            _samples.AddRange(history);
+            _shownProgress = Math.Min(_samples[^1].At, _item.Downloaded / (double)_item.TotalSize.Value);
+        }
         Refresh();
     }
 
+    private void OnThemeChanged()
+    {
+        BuildGraph();
+        DrawMap();
+    }
+
     private static T Res<T>(string key) where T : class => (T)Application.Current.Resources[key];
+
+    private static Style TextStyle(bool caption, bool secondary) => ThemedStyles.Text(caption, secondary);
+    private static Style CardStyle => ThemedStyles.Card(secondary: true);
+    private static Style TrackStyle => ThemedStyles.Get("Grid", null, ("Background", "ControlStrokeColorDefaultBrush"));
+    private static Style MapStyle => ThemedStyles.Get("Border", null, ("Background", "ControlStrokeColorDefaultBrush"));
+    private static Style GridLineStyle => ThemedStyles.Get("Line", null, ("Stroke", "DividerStrokeColorDefaultBrush"));
+    private static Style SpeedLineStyle => ThemedStyles.Get("Line", null, ("Stroke", "TextFillColorSecondaryBrush"));
 
     private static TextBlock Text(bool caption = false, bool secondary = false, string text = "") => new()
     {
         Text = text,
         TextTrimming = TextTrimming.CharacterEllipsis,
         TextWrapping = TextWrapping.NoWrap,
-        Style = caption ? Res<Style>("CaptionTextBlockStyle") : Res<Style>("BodyTextBlockStyle"),
-        Foreground = secondary ? Res<Brush>("TextFillColorSecondaryBrush") : Res<Brush>("TextFillColorPrimaryBrush"),
+        Style = TextStyle(caption, secondary),
     };
 
     /// <summary>A small subtle icon button, like the pause and stop buttons of the copy dialog.</summary>
@@ -263,7 +284,8 @@ public sealed class DownloadWindow : Window
         // A failed download shows what went wrong where the time would be.
         var failed = i.IsFailed && i.Error is not null;
         _labels["Time remaining:"].Text = failed ? "Problem:" : "Time remaining:";
-        _values["Time remaining:"].Foreground = failed ? i.StatusBrush : Res<Brush>("TextFillColorPrimaryBrush");
+        if (failed) _values["Time remaining:"].Foreground = i.StatusBrush;
+        else _values["Time remaining:"].ClearValue(TextBlock.ForegroundProperty);
         if (failed) _values["Time remaining:"].Text = i.Error!;
         ToolTipService.SetToolTip(_values["Time remaining:"], failed ? i.Error : null);
 
@@ -315,9 +337,9 @@ public sealed class DownloadWindow : Window
         _graph.Children.Clear();
         double w = _graphFrame.ActualWidth - 2, h = _graphFrame.ActualHeight - 2;
         if (w <= 0 || h <= 0) return;
-        var accent = Res<SolidColorBrush>("AccentFillColorDefaultBrush").Color;
+        var accent = ThemeColors.Accent;
         for (var k = 1; k < 4; k++)
-            _graph.Children.Add(new Line { X1 = 0, X2 = w, Y1 = h * k / 4, Y2 = h * k / 4, Stroke = Res<Brush>("DividerStrokeColorDefaultBrush"), StrokeThickness = 1 });
+            _graph.Children.Add(new Line { X1 = 0, X2 = w, Y1 = h * k / 4, Y2 = h * k / 4, Style = GridLineStyle, StrokeThickness = 1 });
         _doneArea = new Rectangle { Height = h, Width = w * _shownProgress, Fill = new SolidColorBrush(Windows.UI.Color.FromArgb(28, accent.R, accent.G, accent.B)) };
         _areaFigure = new PathFigure { IsClosed = true };
         _graph.Children.Add(_doneArea);
@@ -328,7 +350,7 @@ public sealed class DownloadWindow : Window
         });
         _line = new Polyline { Stroke = new SolidColorBrush(accent), StrokeThickness = 1.5, StrokeLineJoin = PenLineJoin.Round };
         _graph.Children.Add(_line);
-        _speedLine = new Line { X1 = 0, X2 = w, Stroke = Res<Brush>("TextFillColorSecondaryBrush"), StrokeThickness = 1, Opacity = 0, };
+        _speedLine = new Line { X1 = 0, X2 = w, Style = SpeedLineStyle, StrokeThickness = 1, Opacity = 0, };
         _graph.Children.Add(_speedLine);
         Replot();
         Animate(0);
@@ -480,47 +502,77 @@ public sealed class DownloadWindow : Window
         }
     }
 
-    /// <summary>The whole file as a thin bar; each connection's fetched part filled, at true scale.</summary>
+    /// <summary>
+    /// The whole file as one bar, rounded only at its ends: each connection's part at true scale,
+    /// filled as far as it has arrived.
+    /// </summary>
     private void DrawMap()
     {
         _map.Children.Clear();
         _map.ColumnDefinitions.Clear();
         if (_segments is null || _total <= 0) return;
-        var accent = Res<Brush>("AccentFillColorDefaultBrush");
-        var empty = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        // Each segment becomes two proportional columns: fetched and still to fetch.
         var col = 0;
         foreach (var s in _segments.OfType<JsonObject>().OrderBy(s => s["start"]!.GetValue<long>()))
         {
             long start = s["start"]!.GetValue<long>(), cursor = s["cursor"]!.GetValue<long>(), end = s["end"]!.GetValue<long>();
-            foreach (var (len, brush) in new[] { (cursor - start, accent), (end - cursor, (Brush)empty) })
-            {
-                if (len <= 0) continue;
-                _map.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(len, GridUnitType.Star) });
-                var r = new Rectangle { Fill = brush };
-                Grid.SetColumn(r, col++);
-                _map.Children.Add(r);
-            }
+            if (end <= start) continue;
+            _map.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(end - start, GridUnitType.Star) });
+            var chunk = Bar(cursor - start, end - cursor, radius: 0);
+            Grid.SetColumn(chunk, col++);
+            _map.Children.Add(chunk);
         }
     }
 
-    /// <summary>One line per connection's range: a thin bar and how much of it is fetched.</summary>
+    /// <summary>A rounded track, filled in the accent colour for <paramref name="done"/> of done + left.</summary>
+    private static Grid Bar(long done, long left, double radius)
+    {
+        var bar = new Grid { CornerRadius = new CornerRadius(radius), Style = TrackStyle };
+        bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0, done), GridUnitType.Star) });
+        bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0, left), GridUnitType.Star) });
+        bar.Children.Add(new Border { Background = ThemeColors.Brush(() => ThemeColors.Accent, "accent"), CornerRadius = new CornerRadius(radius) });
+        return bar;
+    }
+
+    private static void SetBar(Grid bar, long done, long left)
+    {
+        bar.ColumnDefinitions[0].Width = new GridLength(Math.Max(0, done), GridUnitType.Star);
+        bar.ColumnDefinitions[1].Width = new GridLength(Math.Max(0, left), GridUnitType.Star);
+    }
+
+    /// <summary>One compact line per connection: its number, a slim bar, and how much has arrived.</summary>
     private void DrawParts()
     {
         var segs = _segments?.OfType<JsonObject>().OrderBy(s => s["start"]!.GetValue<long>()).ToList() ?? [];
         while (_parts.Children.Count > segs.Count) _parts.Children.RemoveAt(_parts.Children.Count - 1);
-        if (segs.Count == 0 && _parts.Children.Count == 0)
-            _parts.Children.Add(Text(caption: true, secondary: true, text: "Shown while the download runs."));
+        if (segs.Count == 0)
+        {
+            _connSummary.Text = "";
+            if (_parts.Children.Count == 0) _parts.Children.Add(Text(caption: true, secondary: true, text: "Shown while the download runs."));
+            return;
+        }
+        var finished = 0;
         for (var k = 0; k < segs.Count; k++)
         {
             long start = segs[k]["start"]!.GetValue<long>(), cursor = segs[k]["cursor"]!.GetValue<long>(), end = segs[k]["end"]!.GetValue<long>();
             var size = Math.Max(1, end - start);
-            if (k >= _parts.Children.Count || _parts.Children[k] is not Grid) { if (k < _parts.Children.Count) _parts.Children.RemoveAt(k); _parts.Children.Insert(k, PartRow()); }
+            var done = cursor >= end;
+            if (done) finished++;
+            if (k >= _parts.Children.Count || _parts.Children[k] is not Grid { Tag: "part" })
+            {
+                if (k < _parts.Children.Count) _parts.Children.RemoveAt(k);
+                _parts.Children.Insert(k, PartRow());
+            }
             var row = (Grid)_parts.Children[k];
-            ((TextBlock)row.Children[0]).Text = $"Connection {k + 1}";
-            ((TextBlock)row.Children[1]).Text = cursor >= end ? $"Done, {Format.Bytes(size)}" : $"{Format.Bytes(cursor - start)} of {Format.Bytes(size)}";
-            ((ProgressBar)row.Children[2]).Value = (cursor - start) * 100.0 / size;
+            // Its number while it runs, a tick once its part is in.
+            ((TextBlock)row.Children[0]).Text = done ? "✓" : $"{k + 1}";
+            SetBar((Grid)row.Children[1], cursor - start, end - cursor);
+            ((TextBlock)row.Children[2]).Text = done
+                ? Format.Bytes(size)
+                : $"{Format.Bytes(cursor - start)} / {Format.Bytes(size)}";
+            ToolTipService.SetToolTip(row, $"Connection {k + 1}: {(cursor - start) * 100.0 / size:0}%");
         }
+        var running = segs.Count - finished;
+        _connSummary.Text = running > 0 ? $"{running} active · {finished} done" : $"All {segs.Count} done";
     }
 
     /// <summary>At the end every connection's range is complete; the engine no longer reports them.</summary>
@@ -534,20 +586,23 @@ public sealed class DownloadWindow : Window
 
     private static Grid PartRow()
     {
-        var row = new Grid { RowSpacing = 4 };
+        var row = new Grid { Tag = "part", ColumnSpacing = 12 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var name = Text(caption: true);
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(132) });
+        var badge = Text(caption: true, secondary: true);
+        badge.VerticalAlignment = VerticalAlignment.Center;
+        var bar = Bar(0, 1, radius: 2);
+        bar.Height = 4;
+        bar.VerticalAlignment = VerticalAlignment.Center;
         var amount = Text(caption: true, secondary: true);
-        var bar = new ProgressBar { Maximum = 100 };
-        Grid.SetColumn(amount, 1);
-        Grid.SetRow(bar, 1);
-        Grid.SetColumnSpan(bar, 2);
-        row.Children.Add(name);
-        row.Children.Add(amount);
+        amount.HorizontalAlignment = HorizontalAlignment.Right;
+        amount.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(bar, 1);
+        Grid.SetColumn(amount, 2);
+        row.Children.Add(badge);
         row.Children.Add(bar);
+        row.Children.Add(amount);
         return row;
     }
 

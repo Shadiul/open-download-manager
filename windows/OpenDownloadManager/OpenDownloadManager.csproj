@@ -55,7 +55,10 @@
     <None Include="$(RustOut)odm.dll" Link="odm.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <None Include="$(RustOut)odm-host.exe" Link="odm-host.exe" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
-  <ItemGroup Condition="Exists('$(ToolsDir)yt-dlp.exe')">
+  <ItemGroup Condition="Exists('$(ToolsDir)ffmpeg.exe')">
     <None Include="$(ToolsDir)*.exe;$(ToolsDir)*.txt" Link="tools\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <ItemGroup Condition="Exists('$(ToolsDir)yt-dlp\yt-dlp.exe')">
+    <None Include="$(ToolsDir)yt-dlp\**\*" Link="tools\yt-dlp\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 </Project>

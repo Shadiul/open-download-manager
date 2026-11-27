@@ -283,6 +283,8 @@ struct Entry {
     last_at: Instant,
     /// Removed while running: delete once it has stopped (`true` also deletes the file).
     removing: Option<bool>,
+    /// A new name or folder chosen while running: applied once the run has stopped, then it resumes.
+    pending_edit: Option<(Option<String>, Option<String>)>,
 }
 
 struct Actor {
@@ -332,7 +334,14 @@ impl Actor {
             rec.job.connections = 0;
             jobs.insert(
                 rec.job.id,
-                Entry { rec, run: None, last_bytes: 0, last_at: Instant::now(), removing: None },
+                Entry {
+                    rec,
+                    run: None,
+                    last_bytes: 0,
+                    last_at: Instant::now(),
+                    removing: None,
+                    pending_edit: None,
+                },
             );
         }
         // Never reuse an id that is in the database, even if its row failed to load.
@@ -542,7 +551,10 @@ impl Actor {
                     return json!({ "ok": false, "error": "No such download" });
                 };
                 e.rec.job.awaiting_confirmation = false;
-                if start {
+                if !start {
+                    return self.pause(id);
+                }
+                if e.rec.job.state == JobState::Paused && e.run.is_none() {
                     return self.resume(id);
                 }
                 self.save(id);
@@ -605,11 +617,9 @@ impl Actor {
             file_name,
             save_dir: save_dir.to_string_lossy().into_owned(),
             total_size: spec.size,
-            state: if spec.start.unwrap_or(true) && !spec.confirm {
-                JobState::Queued
-            } else {
-                JobState::Paused
-            },
+            // A download the user is asked about starts at once all the same: the question only
+            // offers a new name or folder, which apply to the running download.
+            state: if spec.start.unwrap_or(true) { JobState::Queued } else { JobState::Paused },
             awaiting_confirmation: spec.confirm,
             media_kind: spec.media_kind,
             format_id: spec.format_id,
@@ -628,8 +638,17 @@ impl Actor {
         let rec = JobRecord { job, request };
         self.store.save_job(&rec).map_err(|e| format!("Cannot save the download: {e}"))?;
         self.emit(Event::JobAdded { job: rec.job.clone() });
-        self.jobs
-            .insert(id, Entry { rec, run: None, last_bytes: 0, last_at: Instant::now(), removing: None });
+        self.jobs.insert(
+            id,
+            Entry {
+                rec,
+                run: None,
+                last_bytes: 0,
+                last_at: Instant::now(),
+                removing: None,
+                pending_edit: None,
+            },
+        );
         self.schedule();
         Ok(id)
     }
@@ -680,20 +699,25 @@ impl Actor {
         let Some(e) = self.jobs.get_mut(&id) else {
             return json!({ "ok": false, "error": "No such download" });
         };
-        if e.run.is_some() || e.rec.request.name_decided || e.rec.job.state == JobState::Completed {
-            return json!({ "ok": false, "error": "The download has already started" });
+        if e.rec.job.state == JobState::Completed {
+            return json!({ "ok": false, "error": "The download has already finished" });
         }
-        if let Some(name) = file_name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
-            e.rec.job.file_name = naming::sanitize(name);
-            e.rec.job.custom_name = true;
+        if let Some(run) = &mut e.run {
+            // Stop it, move what it has so far, and go on from there (see `finished`).
+            e.pending_edit = Some((file_name, save_dir));
+            if !run.cancel.is_cancelled() {
+                run.requeue = true;
+                run.cancel.cancel();
+            }
+            return json!({ "ok": true });
         }
-        if let Some(dir) = save_dir.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
-            e.rec.job.save_dir = dir.to_string();
-            e.rec.job.custom_dir = true;
-        }
+        let result = apply_edit(&mut e.rec, file_name, save_dir);
         self.save(id);
         self.emit_job(id);
-        json!({ "ok": true })
+        match result {
+            Ok(()) => json!({ "ok": true }),
+            Err(error) => json!({ "ok": false, "error": error }),
+        }
     }
 
     fn pause(&mut self, id: u64) -> Value {
@@ -988,6 +1012,12 @@ impl Actor {
                 if e.rec.job.kind == JobKind::Http {
                     let _ = self.store.save_segments(id, &rows);
                 }
+                if let Some((file_name, save_dir)) = e.pending_edit.take()
+                    && let Err(error) = apply_edit(&mut e.rec, file_name, save_dir)
+                {
+                    e.rec.job.state = JobState::Failed;
+                    e.rec.job.error = Some(error);
+                }
             }
             Outcome::Failed { error, link_expired } => {
                 e.rec.job.state = JobState::Failed;
@@ -1035,6 +1065,53 @@ fn clean_title(title: &str) -> String {
         }
     }
     t.trim().to_string()
+}
+
+/// Gives a download a new name or folder. When it has started, its `.part` file moves along, so it
+/// goes on from where it was.
+fn apply_edit(
+    rec: &mut JobRecord,
+    file_name: Option<String>,
+    save_dir: Option<String>,
+) -> Result<(), String> {
+    let job = &mut rec.job;
+    let name = file_name.as_deref().map(str::trim).filter(|n| !n.is_empty()).map(naming::sanitize);
+    let dir = save_dir.as_deref().map(str::trim).filter(|d| !d.is_empty()).map(String::from);
+    if name.is_none() && dir.is_none() {
+        return Ok(());
+    }
+    let new_name = name.clone().unwrap_or_else(|| job.file_name.clone());
+    let new_dir = dir.clone().unwrap_or_else(|| job.save_dir.clone());
+    if rec.request.name_decided && job.kind == JobKind::Http {
+        let from = engine::part_file(std::path::Path::new(&job.save_dir), &job.file_name);
+        let to_dir = PathBuf::from(&new_dir);
+        if to_dir.join(&new_name) == std::path::Path::new(&job.save_dir).join(&job.file_name) {
+            return Ok(());
+        }
+        std::fs::create_dir_all(&to_dir).map_err(|e| format!("Cannot create folder {new_dir}: {e}"))?;
+        let final_path = naming::unique_path(&to_dir, &new_name);
+        let to = naming::part_path(&final_path);
+        if from != to && from.exists() {
+            move_file(&from, &to)
+                .map_err(|e| format!("Cannot move the download to {}: {e}", to.display()))?;
+        }
+        job.file_name = final_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(new_name);
+    } else {
+        job.file_name = new_name;
+    }
+    job.save_dir = new_dir;
+    job.custom_name |= name.is_some();
+    job.custom_dir |= dir.is_some();
+    Ok(())
+}
+
+/// Renames, or copies and deletes when the folder is on another drive.
+fn move_file(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    std::fs::copy(from, to)?;
+    std::fs::remove_file(from)
 }
 
 /// Removes the `.part` file, and the finished file when asked.

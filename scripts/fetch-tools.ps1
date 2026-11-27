@@ -1,7 +1,7 @@
 # Downloads the tools the app bundles into tools\ (git-ignored), checking each file against the
 # SHA-256 list its project publishes with the release.
 #
-#   yt-dlp.exe              https://github.com/yt-dlp/yt-dlp (Unlicense)
+#   yt-dlp\yt-dlp.exe      https://github.com/yt-dlp/yt-dlp (Unlicense), the folder build
 #   ffmpeg.exe, ffprobe.exe https://github.com/BtbN/FFmpeg-Builds, LGPL build
 #   deno.exe                https://github.com/denoland/deno (MIT), the JavaScript runtime
 #                           yt-dlp needs for full YouTube support
@@ -34,11 +34,19 @@ function Get-Checked([string]$Url, [string]$SumsUrl, [string]$Name, [string]$Out
     Write-Host "  SHA-256 ok: $actual"
 }
 
-$ytdlp = Join-Path $tools 'yt-dlp.exe'
+# The folder build (yt-dlp_win.zip) rather than the single yt-dlp.exe: the single file unpacks
+# itself on every run, which adds about a second before each video starts.
+$ytdlp = Join-Path $tools 'yt-dlp\yt-dlp.exe'
 if ($Force -or -not (Test-Path $ytdlp)) {
     $base = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download'
-    Get-Checked "$base/yt-dlp.exe" "$base/SHA2-256SUMS" 'yt-dlp.exe' $ytdlp
-} else { Write-Host "yt-dlp.exe already present (use -Force to refresh)" }
+    $zip = Join-Path $work 'yt-dlp_win.zip'
+    Get-Checked "$base/yt-dlp_win.zip" "$base/SHA2-256SUMS" 'yt-dlp_win.zip' $zip
+    $dir = Join-Path $tools 'yt-dlp'
+    if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+    Expand-Archive $zip $dir
+    $old = Join-Path $tools 'yt-dlp.exe'
+    if (Test-Path $old) { Remove-Item $old -Force }
+} else { Write-Host "yt-dlp already present (use -Force to refresh)" }
 
 $ffmpeg = Join-Path $tools 'ffmpeg.exe'
 if ($Force -or -not (Test-Path $ffmpeg)) {

@@ -54,6 +54,18 @@ function matches(host, pattern) {
   return !!p && (host === p || host.endsWith('.' + p));
 }
 
+// One request per video while the popup is open; the background keeps answers for 30 minutes.
+const qualities = new Map();
+const getQualities = (url) => {
+  if (!qualities.has(url)) {
+    const p = send({ type: 'probe-page', url });
+    qualities.set(url, p);
+    p.then((r) => { if (!r?.ok) qualities.delete(url); }, () => qualities.delete(url));
+  }
+  return qualities.get(url);
+};
+
+let prefetches = 0;
 let openMenu = null;
 function closeMenu() {
   openMenu?.remove();
@@ -111,13 +123,18 @@ function row(card, tab) {
   if (card.kind === 'page') {
     const more = iconButton('more', 'Choose a quality');
     actions.append(more);
+    // Video posts get their details at once (at most two, as each takes the app a few seconds):
+    // the menu opens ready, and the download starts without reading the page again.
+    if (prefetches++ < 2) getQualities(card.item.url);
+    // Others start asking as the pointer arrives, so the list is usually ready by the click.
+    more.addEventListener('pointerenter', () => getQualities(card.item.url), { once: true });
+    more.addEventListener('focus', () => getQualities(card.item.url), { once: true });
     more.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (openMenu?.dataset.for === card.id) { closeMenu(); return; }
       closeMenu();
       const menu = el('div', 'menu');
       menu.dataset.for = card.id;
-      menu.append(el('div', 'menu-title', 'Getting qualities…'));
       document.body.append(menu);
       openMenu = menu;
       // Below the button, or above it when the popup has no room underneath.
@@ -127,8 +144,14 @@ function row(card, tab) {
         const below = r.bottom + 4;
         menu.style.top = below + menu.offsetHeight <= innerHeight - 4 ? `${below}px` : `${Math.max(4, r.top - 4 - menu.offsetHeight)}px`;
       };
-      place();
-      const r = await send({ type: 'probe-page', url: card.item.url });
+      const pending = getQualities(card.item.url);
+      // Only a list that is not ready yet shows the wait.
+      const ready = await Promise.race([pending, new Promise((res) => setTimeout(() => res(null), 50))]);
+      if (!ready) {
+        menu.append(el('div', 'menu-title', 'Getting qualities…'));
+        place();
+      }
+      const r = await pending;
       if (openMenu !== menu) return;
       if (!r?.ok || !r.formats?.length) {
         menu.replaceChildren(el('div', 'menu-title', r?.error ? `Could not list the qualities: ${r.error}` : 'Could not list the qualities'));

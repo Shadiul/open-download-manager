@@ -20,6 +20,13 @@ public sealed partial class MainWindow : Window
     {
         ViewModel = viewModel;
         InitializeComponent();
+        // The Pause/Resume button follows the selection and the downloads' states; a light poll
+        // covers both without wiring every item.
+        var pauseResume = DispatcherQueue.CreateTimer();
+        pauseResume.Interval = TimeSpan.FromMilliseconds(250);
+        pauseResume.Tick += (_, _) => UpdatePauseResume();
+        pauseResume.Start();
+        Closed += (_, _) => pauseResume.Stop();
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -165,7 +172,7 @@ public sealed partial class MainWindow : Window
         // When space is short the actions keep their icons and lose their labels, rather than
         // disappearing into the overflow menu.
         var labels = !(e.NewSize.Width < 1040 && !narrow || e.NewSize.Width < 440);
-        foreach (var label in new[] { LabelAdd, LabelResume, LabelPause, LabelRemove })
+        foreach (var label in new[] { LabelAdd, LabelPauseResume, LabelRemove })
             label.Visibility = labels ? Visibility.Visible : Visibility.Collapsed;
         Grid.SetRow(Tools, narrow ? 1 : 0);
         Grid.SetColumn(Tools, narrow ? 0 : 1);
@@ -326,14 +333,32 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async void OnResumeClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// One button: Pause when any selected download runs or waits its turn, Resume otherwise.
+    /// It follows the selection and the downloads' states as they change.
+    /// </summary>
+    private bool PausesSelection => Selected.Any(i => i.CanPause);
+
+    private void UpdatePauseResume()
     {
-        foreach (var item in Selected) await Call(new { type = "resume", id = item.Id });
+        PauseResume.IsEnabled = Selected.Any(i => !i.IsCompleted);
+        var pause = PausesSelection;
+        var text = pause ? "Pause" : "Resume";
+        if (LabelPauseResume.Text == text) return;
+        LabelPauseResume.Text = text;
+        PauseResumeIcon.Glyph = pause ? "\uE769" : "\uE768";
+        ToolTipService.SetToolTip(PauseResume, text);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PauseResume, text);
     }
 
-    private async void OnPauseClick(object sender, RoutedEventArgs e)
+    private async void OnPauseResumeClick(object sender, RoutedEventArgs e)
     {
-        foreach (var item in Selected) await Call(new { type = "pause", id = item.Id });
+        var items = Selected.ToList();
+        if (items.Any(i => i.CanPause))
+            foreach (var item in items.Where(i => i.CanPause)) await Call(new { type = "pause", id = item.Id });
+        else
+            foreach (var item in items.Where(i => !i.IsCompleted)) await Call(new { type = "resume", id = item.Id });
+        UpdatePauseResume();
     }
 
     /// <summary>
@@ -406,14 +431,9 @@ public sealed partial class MainWindow : Window
         if (ItemOf(sender) is { } item) Shell.ShowInFolder(item.FilePath, item.SaveDir);
     }
 
-    private async void OnItemResumeClick(object sender, RoutedEventArgs e)
+    private async void OnItemPauseResumeClick(object sender, RoutedEventArgs e)
     {
-        if (ItemOf(sender) is { } item) await Call(new { type = "resume", id = item.Id });
-    }
-
-    private async void OnItemPauseClick(object sender, RoutedEventArgs e)
-    {
-        if (ItemOf(sender) is { } item) await Call(new { type = "pause", id = item.Id });
+        if (ItemOf(sender) is { } item) await Call(new { type = item.CanPause ? "pause" : "resume", id = item.Id });
     }
 
     /// <summary>

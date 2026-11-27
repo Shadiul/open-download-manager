@@ -148,7 +148,7 @@ public sealed partial class SettingsPage : UserControl
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 1 };
         text.Children.Add(new TextBlock { Text = title, TextWrapping = TextWrapping.Wrap });
         if (description is not null)
-            text.Children.Add(new TextBlock { Text = description, Style = Res<Style>("CaptionTextBlockStyle"), Foreground = Res<Brush>("TextFillColorSecondaryBrush"), TextWrapping = TextWrapping.Wrap });
+            text.Children.Add(new TextBlock { Text = description, Style = ThemedStyles.Text(caption: true, secondary: true), TextWrapping = TextWrapping.Wrap });
         Grid.SetColumn(text, 1);
         grid.Children.Add(text);
         if (control is not null)
@@ -172,8 +172,7 @@ public sealed partial class SettingsPage : UserControl
             Padding = new Thickness(16, 12, 16, 12),
             CornerRadius = new CornerRadius(8),
             BorderThickness = new Thickness(1),
-            Background = Res<Brush>("CardBackgroundFillColorDefaultBrush"),
-            BorderBrush = Res<Brush>("CardStrokeColorDefaultBrush"),
+            Style = ThemedStyles.Card(),
         };
     }
 

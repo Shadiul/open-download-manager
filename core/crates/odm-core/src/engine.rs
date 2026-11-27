@@ -222,6 +222,8 @@ enum Step {
 /// Runs a download until it completes, fails or `cancel` fires.
 pub async fn run(mut job: HttpJob, env: Env, transfer: Arc<Transfer>, cancel: CancellationToken) -> Outcome {
     let mut restarts = 0;
+    // A restart settles the name and category again, from the folder the download started in.
+    let base_dir = job.save_dir.clone();
     loop {
         match run_once(&mut job, &env, &transfer, &cancel).await {
             Step::Done(outcome) => return outcome,
@@ -231,6 +233,7 @@ pub async fn run(mut job: HttpJob, env: Env, transfer: Arc<Transfer>, cancel: Ca
                     let _ = std::fs::remove_file(naming::part_path(&job.save_dir.join(&job.file_name)));
                 }
                 job.segments.clear();
+                job.save_dir = base_dir.clone();
                 job.request.name_decided = false;
                 job.request.etag = None;
                 job.request.last_modified = None;
@@ -253,6 +256,9 @@ async fn run_once(
     cancel: &CancellationToken,
 ) -> Step {
     let mut first: Option<Response> = None;
+    // Where this run's connections go: the mirror the first answer came from, when there was one,
+    // so every connection reads the same copy of the file.
+    let mut url = job.url.clone();
     let part;
 
     let can_resume = job.request.name_decided
@@ -288,6 +294,9 @@ async fn run_once(
             .map(String::from)
             .or(job.request.mime.clone());
         let final_url = resp.url().to_string();
+        let host_of = |u: &str| reqwest::Url::parse(u).ok().and_then(|u| u.host_str().map(String::from));
+        job.request.mirrored = host_of(&final_url) != host_of(&job.url);
+        url = final_url.clone();
         let name = if job.fixed_name {
             naming::sanitize(&job.file_name)
         } else {
@@ -362,7 +371,7 @@ async fn run_once(
 
     let worker_env = Arc::new(WorkerEnv {
         client: env.client.clone(),
-        url: job.url.clone(),
+        url,
         request: job.request.clone(),
         resumable: job.resumable,
         file: file.clone(),

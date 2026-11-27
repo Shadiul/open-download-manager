@@ -130,5 +130,6 @@ public sealed partial class ViewSettings : ObservableObject
             _ => TitleBarTheme.UseDefaultAppMode,
         };
         OnPropertyChanged(nameof(ElementTheme));
+        ThemeColors.RaiseChanged();
     }
 }

@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml.Media;
+using OpenDownloadManager.Services;
 
 namespace OpenDownloadManager.Models;
 
@@ -88,6 +89,8 @@ public sealed partial class DownloadItem : ObservableObject
         OnPropertyChanged(nameof(Glyph));
         OnPropertyChanged(nameof(Category));
         OnPropertyChanged(nameof(IsActive));
+        OnPropertyChanged(nameof(PauseResumeText));
+        OnPropertyChanged(nameof(PauseResumeGlyph));
         OnPropertyChanged(nameof(IsCompleted));
         OnPropertyChanged(nameof(IsFailed));
         OnPropertyChanged(nameof(SizeText));
@@ -135,25 +138,19 @@ public sealed partial class DownloadItem : ObservableObject
 
     public bool IsShimmering => State == "downloading";
 
-    private static Brush? _activeFill, _pausedFill, _failedFill;
-
     /// <summary>The accent colour while running, amber when paused, red when failed; all faint.</summary>
-    public Brush? FillBrush
+    public Brush? FillBrush => State switch
     {
-        get
-        {
-            static Brush Tint(string key, byte alpha)
-            {
-                var c = ((Microsoft.UI.Xaml.Media.SolidColorBrush)Microsoft.UI.Xaml.Application.Current.Resources[key]).Color;
-                return new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(alpha, c.R, c.G, c.B));
-            }
-            return State switch
-            {
-                "paused" => _pausedFill ??= Tint("SystemFillColorCautionBrush", 44),
-                "failed" => _failedFill ??= Tint("SystemFillColorCriticalBrush", 40),
-                _ => _activeFill ??= Tint("AccentFillColorDefaultBrush", 52),
-            };
-        }
+        "paused" => ThemeColors.Brush(() => ThemeColors.Caution, "caution", 44),
+        "failed" => ThemeColors.Brush(() => ThemeColors.Critical, "critical", 40),
+        _ => ThemeColors.Brush(() => ThemeColors.Accent, "accent", 52),
+    };
+
+    /// <summary>The theme changed: fetch the colours again.</summary>
+    public void RefreshColors()
+    {
+        OnPropertyChanged(nameof(FillBrush));
+        OnPropertyChanged(nameof(StatusBrush));
     }
 
     public string BarText => State switch
@@ -189,13 +186,13 @@ public sealed partial class DownloadItem : ObservableObject
     public string ProgressPercent => TotalSize is > 0 || IsCompleted ? $"{Progress:0}%" : "";
 
     /// <summary>Red for failed, green for done, the accent while downloading, grey otherwise.</summary>
-    public Brush? StatusBrush => Microsoft.UI.Xaml.Application.Current.Resources[State switch
+    public Brush? StatusBrush => State switch
     {
-        "failed" => "SystemFillColorCriticalBrush",
-        "completed" => "SystemFillColorSuccessBrush",
-        "downloading" or "connecting" => "AccentTextFillColorPrimaryBrush",
-        _ => "TextFillColorSecondaryBrush",
-    }] as Brush;
+        "failed" => ThemeColors.Brush(() => ThemeColors.Critical, "critical"),
+        "completed" => ThemeColors.Brush(() => ThemeColors.Success, "success"),
+        "downloading" or "connecting" => ThemeColors.Brush(() => ThemeColors.AccentText, "accentText"),
+        _ => ThemeColors.Brush(() => ThemeColors.SecondaryText, "secondary"),
+    };
 
     // ----- one-line column texts -----
 
@@ -240,6 +237,10 @@ public sealed partial class DownloadItem : ObservableObject
     public bool IsCompleted => State == "completed";
     public bool IsFailed => State == "failed";
     public bool CanPause => IsActive || State == "queued";
+
+    /// <summary>One Pause/Resume action: Pause while it runs or waits its turn, Resume otherwise.</summary>
+    public string PauseResumeText => CanPause ? "Pause" : "Resume";
+    public string PauseResumeGlyph => CanPause ? "\uE769" : "\uE768";
     public bool CanResume => State is "paused" or "failed";
 
     /// <summary>A video shows its title until the file name is known.</summary>

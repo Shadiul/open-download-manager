@@ -132,16 +132,10 @@
                             </StackPanel>
                         </Button>
                         <Rectangle Width="1" Height="20" Margin="4,0" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                        <Button Click="OnResumeClick" ToolTipService.ToolTip="Resume" AutomationProperties.Name="Resume">
+                        <Button x:Name="PauseResume" Click="OnPauseResumeClick" ToolTipService.ToolTip="Pause" AutomationProperties.Name="Pause">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE768;" FontSize="16" />
-                                <TextBlock x:Name="LabelResume" Text="Resume" />
-                            </StackPanel>
-                        </Button>
-                        <Button Click="OnPauseClick" ToolTipService.ToolTip="Pause" AutomationProperties.Name="Pause">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE769;" FontSize="16" />
-                                <TextBlock x:Name="LabelPause" Text="Pause" />
+                                <FontIcon x:Name="PauseResumeIcon" Glyph="&#xE769;" FontSize="16" />
+                                <TextBlock x:Name="LabelPauseResume" Text="Pause" />
                             </StackPanel>
                         </Button>
                         <Button Click="OnRemoveClick" ToolTipService.ToolTip="Remove (Delete)" AutomationProperties.Name="Remove">
@@ -243,8 +237,11 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <!-- Checkboxes at 80%: 16 px boxes, quieter next to the file icons. -->
                     <CheckBox x:Name="SelectAll" MinWidth="0" Padding="0" VerticalAlignment="Center" Click="OnSelectAllClick"
-                              ToolTipService.ToolTip="Check all" />
+                              ToolTipService.ToolTip="Check all" RenderTransformOrigin="0.5,0.5">
+                        <CheckBox.RenderTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8" /></CheckBox.RenderTransform>
+                    </CheckBox>
                     <Button Grid.Column="1" Style="{StaticResource HeaderButton}" Tag="name" Click="OnSortClick" Margin="22,0,0,0">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <TextBlock Text="Name" />
@@ -314,8 +311,9 @@
                                             <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE9D9;" /></MenuFlyoutItem.Icon>
                                         </MenuFlyoutItem>
                                         <MenuFlyoutSeparator />
-                                        <MenuFlyoutItem Text="Resume" Icon="Play" Click="OnItemResumeClick" />
-                                        <MenuFlyoutItem Text="Pause" Icon="Pause" Click="OnItemPauseClick" />
+                                        <MenuFlyoutItem Text="{x:Bind PauseResumeText, Mode=OneWay}" Click="OnItemPauseResumeClick">
+                                            <MenuFlyoutItem.Icon><FontIcon Glyph="{x:Bind PauseResumeGlyph, Mode=OneWay}" /></MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
                                         <MenuFlyoutItem Text="Refresh address" Icon="Refresh" Click="OnRefreshAddressClick" />
                                         <MenuFlyoutItem Text="Speed limit…" Click="OnItemSpeedLimitClick">
                                             <MenuFlyoutItem.Icon><FontIcon Glyph="&#xEC4A;" /></MenuFlyoutItem.Icon>
@@ -336,8 +334,10 @@
                                 </Grid.ColumnDefinitions>
                                 <!-- The row is the progress bar: a fill that glides to the new progress, with a
                                      shimmer while bytes arrive. Amber when paused, red when failed; fades when done. -->
-                                <Grid Grid.ColumnSpan="6" Margin="-12,3,-12,3" CornerRadius="4" IsHitTestVisible="False"
-                                      Background="{x:Bind FillBrush, Mode=OneWay}"
+                                <!-- The fill stretches with a scale, which would squash rounded corners; this
+                                     fixed rounded frame clips it instead, so the corners stay round. -->
+                                <Grid Grid.ColumnSpan="6" Margin="-12,3,-12,3" CornerRadius="4" IsHitTestVisible="False">
+                                <Grid Background="{x:Bind FillBrush, Mode=OneWay}"
                                       Scale="{x:Bind FillScale, Mode=OneWay}" CenterPoint="0,0,0"
                                       Opacity="{x:Bind FillOpacity, Mode=OneWay}"
                                       Loaded="OnRowFillLoaded">
@@ -360,6 +360,7 @@
                                         </Rectangle.RenderTransform>
                                     </Rectangle>
                                 </Grid>
+                                </Grid>
                                 <Grid ColumnSpacing="10">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
@@ -370,7 +371,10 @@
                                          once something is already checked (see OnItemClick). -->
                                     <CheckBox MinWidth="0" Width="20" Padding="0" VerticalAlignment="Center"
                                               IsChecked="{x:Bind IsChecked, Mode=TwoWay}"
-                                              AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}" />
+                                              AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}"
+                                              RenderTransformOrigin="0.5,0.5">
+                                        <CheckBox.RenderTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8" /></CheckBox.RenderTransform>
+                                    </CheckBox>
                                     <Grid Grid.Column="1" Width="{x:Bind services:ViewSettings.Current.IconSize, Mode=OneWay}"
                                           Height="{x:Bind services:ViewSettings.Current.IconSize, Mode=OneWay}" VerticalAlignment="Center">
                                         <FontIcon Glyph="{x:Bind Glyph, Mode=OneWay}" FontSize="16"

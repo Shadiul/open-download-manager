@@ -75,6 +75,17 @@ impl Harness {
     }
 }
 
+fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .flat_map(|e| if e.path().is_dir() { walk(&e.path()) } else { vec![e.path()] })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn server(content: Vec<u8>) -> (tokio::runtime::Runtime, Server) {
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     let server = rt.block_on(Server::start(
@@ -213,9 +224,11 @@ fn browser_downloads_arrive_over_the_pipe() {
 }
 
 #[test]
-fn browser_downloads_wait_for_the_new_download_window() {
-    let content = data(300 * KB, 4);
+fn browser_downloads_start_while_the_new_download_window_asks() {
+    let content = data(2 * KB * KB, 4);
     let (_rt, server) = server(content.clone());
+    // Slow enough that the download is still running when the user answers.
+    server.behaviour.rate.store(256 * KB as u64, Ordering::SeqCst);
     let mut h = Harness::start(tempfile::tempdir().unwrap(), false);
     let core = h.core.as_ref().unwrap();
     let request: odm_core::protocol::DownloadRequest = serde_json::from_value(json!({
@@ -225,19 +238,46 @@ fn browser_downloads_wait_for_the_new_download_window() {
     core.runtime().block_on(core.manager().browser(vec![request])).unwrap();
 
     let job = h.call(json!({ "type": "list" }))["jobs"][0].clone();
-    assert_eq!(job["state"], "paused");
     assert_eq!(job["awaitingConfirmation"], true);
+    assert_ne!(job["state"], "paused", "it starts without waiting for the answer");
     let id = job["id"].as_u64().unwrap();
+    let running = h.wait_for(id, "some bytes", |j| j["downloaded"].as_u64().unwrap_or(0) > 0);
+    assert_eq!(running["state"], "downloading");
 
+    // A new name and folder while it runs: the partial file moves and the download goes on.
     let chosen = h.downloads.join("Chosen");
     let reply = h.call(json!({ "type": "edit", "id": id, "fileName": "my name.bin", "saveDir": chosen }));
     assert_eq!(reply["ok"], true, "{reply}");
     assert_eq!(h.call(json!({ "type": "confirm", "id": id, "start": true }))["ok"], true);
+    server.behaviour.rate.store(0, Ordering::SeqCst);
 
     let done = h.wait_for(id, "completion", |j| j["state"] == "completed");
     assert_eq!(done["awaitingConfirmation"], false);
     assert_eq!(std::path::Path::new(done["filePath"].as_str().unwrap()), chosen.join("my name.bin"));
     assert_eq!(std::fs::read(chosen.join("my name.bin")).unwrap(), content);
+    let leftovers: Vec<_> =
+        walk(&h.downloads).into_iter().filter(|p| p.extension().is_some_and(|e| e == "part")).collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
     assert_eq!(h.call(json!({ "type": "edit", "id": id, "fileName": "late.bin" }))["ok"], false);
+    h.stop();
+}
+
+#[test]
+fn download_later_pauses_a_started_download() {
+    let content = data(2 * KB * KB, 5);
+    let (_rt, server) = server(content.clone());
+    server.behaviour.rate.store(128 * KB as u64, Ordering::SeqCst);
+    let mut h = Harness::start(tempfile::tempdir().unwrap(), false);
+    let core = h.core.as_ref().unwrap();
+    let request: odm_core::protocol::DownloadRequest = serde_json::from_value(json!({
+        "url": server.url, "filename": "later.bin", "fileSize": content.len(), "source": "browser-download"
+    }))
+    .unwrap();
+    core.runtime().block_on(core.manager().browser(vec![request])).unwrap();
+    let id = h.call(json!({ "type": "list" }))["jobs"][0]["id"].as_u64().unwrap();
+    h.wait_for(id, "some bytes", |j| j["downloaded"].as_u64().unwrap_or(0) > 0);
+    assert_eq!(h.call(json!({ "type": "confirm", "id": id, "start": false }))["ok"], true);
+    let paused = h.wait_for(id, "pause", |j| j["state"] == "paused");
+    assert_eq!(paused["awaitingConfirmation"], false);
     h.stop();
 }

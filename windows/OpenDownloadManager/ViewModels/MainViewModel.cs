@@ -69,6 +69,7 @@ public sealed partial class MainViewModel : ObservableObject
         SortBy = appSettings.SortBy;
         SortDescending = appSettings.SortDescending;
         Core.EventReceived += OnEvent;
+        ThemeColors.Changed += () => { foreach (var item in _items.Values) item.RefreshColors(); };
     }
 
     public DownloadItem? Find(ulong id) => _items.GetValueOrDefault(id);
@@ -87,6 +88,7 @@ public sealed partial class MainViewModel : ObservableObject
                 Track(item);
             }
         }
+        SpeedHistory.Keep(_items.Keys);
         Refilter();
     }
 
@@ -142,6 +144,8 @@ public sealed partial class MainViewModel : ObservableObject
                     }
                     var (wasState, wasPosition, wasName) = (item.State, item.Position, item.DisplayName);
                     item.Update(job);
+                    if (item.State == "downloading" && item.TotalSize is > 0)
+                        SpeedHistory.Record(id, item.Downloaded / (double)item.TotalSize.Value, item.Speed);
                     // Only changes that move a row re-place it, so rows don't jump on every progress tick.
                     if (wasPosition != item.Position || wasState != item.State || wasName != item.DisplayName
                         || Matches(item) != Visible.Contains(item))
@@ -155,6 +159,7 @@ public sealed partial class MainViewModel : ObservableObject
                 {
                     var id = (ulong)(ev["id"]?.GetValue<long>() ?? 0);
                     if (_items.Remove(id, out var item)) Visible.Remove(item);
+                    SpeedHistory.Forget(id);
                     CountChecked();
                     break;
                 }

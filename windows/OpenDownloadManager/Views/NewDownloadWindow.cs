@@ -12,8 +12,8 @@ using Windows.Storage.Pickers;
 namespace OpenDownloadManager.Views;
 
 /// <summary>
-/// The window that pops up when the browser hands over a download: file name, size and folder,
-/// then Start download, Download later or Cancel.
+/// The window that pops up when the browser hands over a download. The download is already
+/// running behind it: the window offers another name or folder, Download later (pause) or Cancel.
 /// </summary>
 public sealed class NewDownloadWindow : Window
 {
@@ -25,6 +25,11 @@ public sealed class NewDownloadWindow : Window
     private readonly TextBlock _error = new() { Foreground = new SolidColorBrush(Colors.IndianRed), TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
     private readonly string _originalName;
     private readonly string _defaultFolder;
+    private readonly string _baseFolder;
+    private string _lastName;
+    private readonly TextBlock _size = new() { Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };
+    private readonly TextBlock _progress = new() { Style = ThemedStyles.Text(caption: true, secondary: true) };
+    private string _originalNameShown = "";
     private bool _decided;
 
     public NewDownloadWindow(CoreClient core, DownloadItem item)
@@ -36,15 +41,19 @@ public sealed class NewDownloadWindow : Window
 
         var video = item.Kind == "video";
         _originalName = video ? item.Title ?? item.FileName : item.FileName;
-        _defaultFolder = DefaultFolder(core, item);
+        // The download's folder changes once it settles its category; the choice starts from the base.
+        _baseFolder = item.SaveDir;
+        _lastName = _originalName;
+        _defaultFolder = DefaultFolder(core, item, _baseFolder);
 
         _name = new TextBox { Header = video ? "Name" : "File name", Text = _originalName };
         _folder = new TextBox { Header = "Save to", Text = _defaultFolder };
         _name.TextChanged += (_, _) =>
         {
             // The category folder follows the name until the user picks a folder.
-            if (!video && _folder.Text == _defaultFolderFor(_originalName))
+            if (!video && _folder.Text == _defaultFolderFor(_lastName))
                 _folder.Text = _defaultFolderFor(_name.Text);
+            _lastName = _name.Text;
         };
 
         var browse = new Button { Content = "Browse…", VerticalAlignment = VerticalAlignment.Bottom };
@@ -56,9 +65,6 @@ public sealed class NewDownloadWindow : Window
         Grid.SetColumn(browse, 1);
         folderRow.Children.Add(browse);
 
-        var size = item.TotalSize is > 0 ? Format.Bytes(item.TotalSize.Value)
-            : video ? "Known once the download starts"
-            : "Unknown until the server answers";
         var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 14 };
         header.Children.Add(new FontIcon { Glyph = item.Glyph, FontSize = 30 });
         header.Children.Add(new StackPanel
@@ -66,7 +72,7 @@ public sealed class NewDownloadWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
             Children =
             {
-                new TextBlock { Text = $"Size: {size}", Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] },
+                _size,
                 new TextBlock
                 {
                     // One line with the site; the full address (often a long signed link) is on hover.
@@ -75,14 +81,14 @@ public sealed class NewDownloadWindow : Window
                     TextTrimming = TextTrimming.CharacterEllipsis,
                     TextWrapping = TextWrapping.NoWrap,
                     MaxLines = 1,
-                    Opacity = 0.7,
-                    Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                    Style = ThemedStyles.Text(caption: true, secondary: true),
                 },
+                _progress,
             },
         });
         ToolTipService.SetToolTip(header, item.Url);
 
-        var start = new Button { Content = "Start download", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        var start = new Button { Content = "Download", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
         var later = new Button { Content = "Download later" };
         var cancel = new Button { Content = "Cancel" };
         start.Click += async (_, _) => await Decide(startNow: true);
@@ -113,6 +119,10 @@ public sealed class NewDownloadWindow : Window
         }
         CenterOnScreen();
         ViewSettings.Current.Track(this);
+        _originalNameShown = _originalName;
+        ShowLive();
+        _item.PropertyChanged += OnItemChanged;
+        Closed += (_, _) => _item.PropertyChanged -= OnItemChanged;
         // Closing the window with its X is the same as Cancel.
         AppWindow.Closing += async (_, e) =>
         {
@@ -122,15 +132,41 @@ public sealed class NewDownloadWindow : Window
         };
     }
 
-    private string _defaultFolderFor(string name) => DefaultFolder(_core, _item, name);
+    private void OnItemChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) =>
+        DispatcherQueue.TryEnqueue(ShowLive);
+
+    /// <summary>The size and progress of the download running behind the window.</summary>
+    private void ShowLive()
+    {
+        var video = _item.Kind == "video";
+        _size.Text = "Size: " + (_item.TotalSize is > 0 ? Format.Bytes(_item.TotalSize.Value)
+            : video ? "known once the video's details arrive"
+            : "unknown until the server answers");
+        _progress.Text = _item.State switch
+        {
+            "connecting" => "Connecting…",
+            "downloading" => string.Join(" · ", new[] { $"Downloading: {_item.ProgressText}", _item.SpeedText }.Where(t => t.Length > 0)),
+            "completed" => "Downloaded",
+            "failed" => _item.Error ?? "Failed",
+            _ => "",
+        };
+        // The server's name, once known, replaces the guess, unless the user has typed their own.
+        if (!video && _item.FileName != _originalNameShown && _name.Text == _originalNameShown)
+        {
+            _originalNameShown = _item.FileName;
+            _name.Text = _item.FileName;
+        }
+    }
+
+    private string _defaultFolderFor(string name) => DefaultFolder(_core, _item, _baseFolder, name);
 
     /// <summary>Where the file goes unless the user picks a folder: the base folder, plus its category.</summary>
-    private static string DefaultFolder(CoreClient core, DownloadItem item, string? name = null)
+    private static string DefaultFolder(CoreClient core, DownloadItem item, string baseFolder, string? name = null)
     {
-        if (item.Kind == "video") return item.SaveDir;
+        if (item.Kind == "video") return baseFolder;
         var settings = core.Call(new { type = "getSettings" })["settings"] as JsonObject;
         var categories = settings?["categoryFolders"]?.GetValue<bool>() ?? true;
-        return categories ? Path.Combine(item.SaveDir, Categories.Of(name ?? item.FileName)) : item.SaveDir;
+        return categories ? Path.Combine(baseFolder, Categories.Of(name ?? item.FileName)) : baseFolder;
     }
 
     private void CenterOnScreen()
@@ -153,7 +189,7 @@ public sealed class NewDownloadWindow : Window
     {
         var name = _name.Text.Trim();
         var folder = _folder.Text.Trim();
-        var nameChanged = name.Length > 0 && name != _originalName;
+        var nameChanged = name.Length > 0 && name != _originalNameShown;
         // Only a folder the user changed is fixed; otherwise the category follows the server's file name.
         var folderChanged = folder.Length > 0 && folder != _defaultFolderFor(name);
         if (nameChanged || folderChanged)
@@ -170,6 +206,8 @@ public sealed class NewDownloadWindow : Window
         if (!Ok(await _core.CallAsync(new { type = "confirm", id = _item.Id, start = startNow }))) return;
         if (_dontAsk.IsChecked == true) await TurnOffAsking();
         Finish();
+        if (startNow && App.Current?.Settings.ShowProgressWindow == true && _item.State != "completed")
+            App.Current.ShowProgressWindow(_item);
     }
 
     private async Task CancelDownload()

@@ -25,9 +25,17 @@ public static class AppPaths
 {
     public const string AppName = "Open Download Manager";
 
+    /// <summary>
+    /// For development: ODM_PROFILE=name runs a separate copy with its own data, its own browser
+    /// endpoint, and no browser or Windows registration, next to the everyday one.
+    /// </summary>
+    public static string? Profile { get; } =
+        Environment.GetEnvironmentVariable("ODM_PROFILE") is { Length: > 0 } p && p.All(char.IsLetterOrDigit) ? p : null;
+
     /// <summary>%LOCALAPPDATA%\OpenDownloadManager: the state database and app settings.</summary>
     public static string DataDir { get; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenDownloadManager");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            Profile is null ? "OpenDownloadManager" : $"OpenDownloadManager-{Profile}");
 
     public static string AppDir { get; } = AppContext.BaseDirectory;
 
@@ -40,7 +48,7 @@ public static class AppPaths
     public static string IconPath { get; } = Path.Combine(AppDir, "Assets", "app.ico");
 
     /// <summary>The user's Downloads folder, wherever they moved it.</summary>
-    public static string DownloadsDir { get; } = KnownDownloads();
+    public static string DownloadsDir { get; } = Profile is null ? KnownDownloads() : Path.Combine(DataDir, "Downloads");
 
     private static string KnownDownloads()
     {
