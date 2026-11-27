@@ -498,7 +498,16 @@ async fn first_response(job: &HttpJob, env: &Env, cancel: &CancellationToken) ->
                         link_expired: true,
                     }));
                 }
-                if status.is_server_error()
+                // Redirected to a mirror that lacks the file: asking again lands on another one.
+                let mirror_missing = status == StatusCode::NOT_FOUND
+                    && reqwest::Url::parse(&job.url)
+                        .ok()
+                        .and_then(|u| u.host_str().map(String::from))
+                        .as_deref()
+                        != resp.url().host_str();
+                if mirror_missing {
+                    "This mirror does not have the file".to_string()
+                } else if status.is_server_error()
                     || status == StatusCode::TOO_MANY_REQUESTS
                     || status == StatusCode::REQUEST_TIMEOUT
                 {

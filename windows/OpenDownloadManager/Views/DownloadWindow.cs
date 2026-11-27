@@ -22,8 +22,9 @@ namespace OpenDownloadManager.Views;
 public sealed class DownloadWindow : Window
 {
     private const int WindowWidth = 520;
-    private const int CollapsedHeight = 388;
-    private const int ExpandedHeight = 612;
+
+    /// <summary>The spacing rhythm: between sections, and inside a section.</summary>
+    private const double Section = 16, Inner = 6;
 
     private readonly CoreClient _core;
     private readonly DownloadItem _item;
@@ -36,13 +37,13 @@ public sealed class DownloadWindow : Window
     private readonly Canvas _graph = new();
     private readonly Border _graphFrame;
     private readonly TextBlock _speedLabel = Text(caption: true);
-    private readonly Grid _facts = new() { ColumnSpacing = 12, RowSpacing = 4 };
+    private readonly Grid _facts = new() { ColumnSpacing = 12, RowSpacing = Inner };
     private readonly Dictionary<string, TextBlock> _values = [];
     private readonly Dictionary<string, TextBlock> _labels = [];
     private readonly Button _detailsToggle;
     private readonly FontIcon _detailsChevron = new() { Glyph = "", FontSize = 10 };
     private readonly TextBlock _detailsLabel = new() { Text = "More details" };
-    private readonly StackPanel _details = new() { Spacing = 8, Visibility = Visibility.Collapsed };
+    private readonly StackPanel _details = new() { Spacing = Inner + 2, Visibility = Visibility.Collapsed };
     private readonly Grid _map = new() { Height = 6, CornerRadius = new CornerRadius(3) };
     private readonly StackPanel _parts = new() { Spacing = 12 };
     private readonly TextBlock _connSummary = Text(caption: true, secondary: true);
@@ -146,20 +147,19 @@ public sealed class DownloadWindow : Window
         footer.Children.Add(_detailsToggle);
         footer.Children.Add(_buttons);
 
-        var body = new Grid { Padding = new Thickness(20, 12, 20, 16), RowSpacing = 12 };
-        for (var i = 0; i < 6; i++) body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        void Row(FrameworkElement e, int r) { Grid.SetRow(e, r); body.Children.Add(e); }
-        Row(_route, 0);
-        Row(headline, 1);
-        Row(new StackPanel { Spacing = 4, Children = { _speedLabel, _graphFrame } }, 2);
-        Row(_facts, 3);
-        Row(footer, 4);
-        Row(_details, 5);
+        // Sections a fixed distance apart, with tighter spacing inside each; the window's height then
+        // follows the content (FitHeight), so nothing is left empty at the bottom.
+        var body = new StackPanel { Padding = new Thickness(20, 12, 20, 20), Spacing = Section, VerticalAlignment = VerticalAlignment.Top };
+        body.Children.Add(new StackPanel { Spacing = 2, Children = { _route, headline } });
+        body.Children.Add(new StackPanel { Spacing = Inner, Children = { _speedLabel, _graphFrame } });
+        body.Children.Add(_facts);
+        body.Children.Add(footer);
+        body.Children.Add(_details);
         Content = body;
+        body.Loaded += (_, _) => FitHeight();
 
         AppWindow.SetIcon(AppPaths.IconPath);
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(WindowWidth, CollapsedHeight));
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(WindowWidth, 400));
         if (AppWindow.Presenter is OverlappedPresenter p)
         {
             p.IsResizable = false;
@@ -464,6 +464,18 @@ public sealed class DownloadWindow : Window
 
     // ----- more details -----
 
+    /// <summary>Makes the window exactly as tall as its content.</summary>
+    private void FitHeight()
+    {
+        if (Content is not FrameworkElement root || root.XamlRoot is null) return;
+        var scale = root.XamlRoot.RasterizationScale;
+        var width = AppWindow.ClientSize.Width / scale;
+        root.Measure(new Windows.Foundation.Size(width, double.PositiveInfinity));
+        var height = (int)Math.Ceiling(root.DesiredSize.Height * scale);
+        if (height > 0 && height != AppWindow.ClientSize.Height)
+            AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(AppWindow.ClientSize.Width, height));
+    }
+
     private void SetExpanded(bool expanded)
     {
         _expanded = expanded;
@@ -471,7 +483,7 @@ public sealed class DownloadWindow : Window
         _detailsChevron.Glyph = expanded ? "" : "";
         _detailsLabel.Text = expanded ? "Fewer details" : "More details";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_detailsToggle, _detailsLabel.Text);
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(WindowWidth, expanded ? ExpandedHeight : CollapsedHeight));
+        FitHeight();
         if (expanded)
         {
             _ = Poll();
