@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
@@ -131,8 +131,111 @@ pub fn needs_login(error: &str) -> bool {
 /// Points yt-dlp at the bundled JavaScript runtime (deno), which YouTube extraction needs for
 /// all formats and for signed-in requests. Without it yt-dlp falls back to fewer formats.
 fn runtime_args(tools_dir: &Path) -> Vec<String> {
-    let deno = tool_path(tools_dir, "deno");
-    if deno.exists() { vec!["--js-runtimes".into(), format!("deno:{}", deno.display())] } else { Vec::new() }
+    match deno_path(tools_dir) {
+        Some(deno) => vec!["--js-runtimes".into(), format!("deno:{}", deno.display())],
+        None => Vec::new(),
+    }
+}
+
+// ----- deno, fetched the first time a video needs it -----
+//
+// yt-dlp needs a JavaScript runtime for YouTube. Deno is about 95 MB, so the app does not ship it:
+// the first YouTube video downloads it (about 40 MB) into the app's data folder.
+
+/// Where a fetched deno lives: `<data dir>/tools`. Set once when the core starts.
+static RUNTIME_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// One fetch at a time; others wait for it.
+static FETCHING: LazyLock<tokio::sync::Mutex<()>> = LazyLock::new(Default::default);
+
+pub fn set_runtime_dir(dir: PathBuf) {
+    let _ = RUNTIME_DIR.set(dir);
+}
+
+/// Deno next to the other tools (a developer's copy), or the one fetched earlier.
+fn deno_path(tools_dir: &Path) -> Option<PathBuf> {
+    let bundled = tool_path(tools_dir, "deno");
+    if bundled.exists() {
+        return Some(bundled);
+    }
+    let fetched = tool_path(RUNTIME_DIR.get()?, "deno");
+    fetched.exists().then_some(fetched)
+}
+
+/// Pages whose videos yt-dlp can only read with a JavaScript runtime.
+pub fn needs_js_runtime(url: &str) -> bool {
+    reqwest::Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_ascii_lowercase)).is_some_and(|h| {
+        ["youtube.com", "youtu.be", "youtube-nocookie.com"]
+            .iter()
+            .any(|d| h == *d || h.ends_with(&format!(".{d}")))
+    })
+}
+
+/// Makes sure deno is there for a page that needs it, fetching it the first time.
+pub async fn ensure_js_runtime(tools_dir: &Path, url: &str) -> Result<(), String> {
+    // Nothing to fetch for: without yt-dlp the download fails anyway, with its own message.
+    if !needs_js_runtime(url) || deno_path(tools_dir).is_some() || !tool_path(tools_dir, "yt-dlp").exists() {
+        return Ok(());
+    }
+    let Some(dir) = RUNTIME_DIR.get() else { return Ok(()) };
+    let _one = FETCHING.lock().await;
+    if deno_path(tools_dir).is_some() {
+        return Ok(()); // fetched while we waited
+    }
+    fetch_deno(dir).await
+}
+
+async fn fetch_deno(dir: &Path) -> Result<(), String> {
+    use sha2::Digest;
+    let asset = if cfg!(windows) {
+        "deno-x86_64-pc-windows-msvc.zip"
+    } else if cfg!(target_arch = "aarch64") {
+        "deno-aarch64-apple-darwin.zip"
+    } else {
+        "deno-x86_64-apple-darwin.zip"
+    };
+    let base = "https://github.com/denoland/deno/releases/latest/download";
+    let client =
+        reqwest::Client::builder().user_agent("OpenDownloadManager").build().map_err(|e| e.to_string())?;
+    let get = |url: String| {
+        let client = client.clone();
+        async move {
+            client
+                .get(&url)
+                .send()
+                .await
+                .and_then(|r| r.error_for_status())
+                .map_err(|e| format!("Cannot download deno, which YouTube videos need: {e}"))
+        }
+    };
+    let zip = get(format!("{base}/{asset}")).await?.bytes().await.map_err(|e| e.to_string())?;
+    let sums = get(format!("{base}/{asset}.sha256sum")).await?.text().await.map_err(|e| e.to_string())?;
+    let expected = sums
+        .split(|c: char| !c.is_ascii_hexdigit())
+        .find(|t| t.len() == 64)
+        .map(str::to_ascii_lowercase)
+        .ok_or("deno's checksum file is not readable")?;
+    let actual: String = sha2::Sha256::digest(&zip).iter().map(|b| format!("{b:02x}")).collect();
+    if actual != expected {
+        return Err("The downloaded deno does not match its checksum".into());
+    }
+    std::fs::create_dir_all(dir).map_err(|e| format!("Cannot create {}: {e}", dir.display()))?;
+    let zip_path = dir.join(asset);
+    std::fs::write(&zip_path, &zip).map_err(|e| format!("Cannot save deno: {e}"))?;
+    // tar (bsdtar) reads zip files and comes with Windows 10 1803+ and macOS.
+    let status = command(Path::new("tar"))
+        .arg("-xf")
+        .arg(&zip_path)
+        .arg("-C")
+        .arg(dir)
+        .status()
+        .await
+        .map_err(|e| format!("Cannot unpack deno: {e}"))?;
+    let _ = std::fs::remove_file(&zip_path);
+    if !status.success() || !tool_path(dir, "deno").exists() {
+        return Err("Cannot unpack deno".into());
+    }
+    Ok(())
 }
 
 fn has_cookies(ctx: &RequestContext) -> bool {
@@ -163,6 +266,7 @@ pub struct ProbeResult {
 
 /// Lists the qualities for a video page, best first.
 pub async fn probe(tools_dir: &Path, url: &str, ctx: &RequestContext) -> Result<ProbeResult, String> {
+    ensure_js_runtime(tools_dir, url).await?;
     match probe_as(tools_dir, url, ctx, Identity::Anonymous).await {
         Err(e) if needs_login(&e) && has_cookies(ctx) => {
             probe_as(tools_dir, url, ctx, Identity::Browser).await
@@ -387,6 +491,9 @@ fn parse_progress(line: &str) -> Option<(u64, Option<u64>)> {
 
 /// Runs yt-dlp until the file is saved, it fails, or `cancel` fires.
 pub async fn run(job: VideoJob, transfer: Arc<Transfer>, cancel: CancellationToken) -> Outcome {
+    if let Err(error) = ensure_js_runtime(&job.tools_dir, &job.url).await {
+        return Outcome::Failed { error, link_expired: false };
+    }
     let first = Identity::first_for(job.media_kind);
     // Straight from the quality menu's page details when they are fresh; if those are stale after
     // all (an address that expired), read the page again.
@@ -628,6 +735,15 @@ mod tests {
         assert!(needs_login("[youtube] x: Sign in to confirm you're not a bot. Use --cookies-from-browser"));
         assert!(needs_login("[youtube] x: Private video. Sign in if you've been granted access"));
         assert!(!needs_login("[youtube] x: Requested format is not available"));
+    }
+
+    #[test]
+    fn only_youtube_needs_the_javascript_runtime() {
+        assert!(needs_js_runtime("https://www.youtube.com/watch?v=x"));
+        assert!(needs_js_runtime("https://youtu.be/x"));
+        assert!(needs_js_runtime("https://m.youtube.com/shorts/x"));
+        assert!(!needs_js_runtime("https://vimeo.com/1"));
+        assert!(!needs_js_runtime("https://notyoutube.com/x"));
     }
 
     #[test]
