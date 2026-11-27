@@ -27,6 +27,7 @@ public sealed partial class SettingsPage : UserControl
     private readonly NumberBox _connections = Number(1, 32);
     private readonly NumberBox _parallel = Number(1, 20);
     private readonly NumberBox _speed = Number(0, 10_000_000);
+    private readonly ComboBox _speedUnit = new() { Items = { "MB/s", "KB/s" }, SelectedIndex = 0, MinWidth = 100 };
     private readonly ToggleSwitch _schedule = Switch();
     private readonly TimePicker _start = new() { ClockIdentifier = "24HourClock", MinWidth = 0 };
     private readonly TimePicker _stop = new() { ClockIdentifier = "24HourClock", MinWidth = 0 };
@@ -77,7 +78,8 @@ public sealed partial class SettingsPage : UserControl
         page.Children.Add(Card("", "Sort into category folders", "Video, Music, Documents, Programs, Archives and Other, inside the download folder.", _categories));
         page.Children.Add(Card("", "Connections per download", "More connections are faster on most servers. 1 to 32.", _connections));
         page.Children.Add(Card("", "Downloads at the same time", "The rest wait in the queue.", _parallel));
-        page.Children.Add(Card("", "Speed limit", "For all downloads together, in KB/s. 0 means no limit.", _speed));
+        page.Children.Add(Card("", "Speed limit", "For all downloads together. 0 means no limit.",
+            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _speed, _speedUnit } }));
 
         Group(page, "Schedule");
         page.Children.Add(Card("", "Only download between set times", "Downloads outside the window wait in the queue.", _schedule));
@@ -184,7 +186,10 @@ public sealed partial class SettingsPage : UserControl
         _categories.IsOn = _settings["categoryFolders"]?.GetValue<bool>() ?? true;
         _connections.Value = _settings["connections"]?.GetValue<int>() ?? 8;
         _parallel.Value = _settings["maxParallel"]?.GetValue<int>() ?? 3;
-        _speed.Value = (_settings["speedLimit"]?.GetValue<long>() ?? 0) / 1024;
+        var limit = _settings["speedLimit"]?.GetValue<long>() ?? 0;
+        var inMb = limit == 0 || limit % (1024 * 1024) == 0;
+        _speedUnit.SelectedIndex = inMb ? 0 : 1;
+        _speed.Value = limit / (inMb ? 1024.0 * 1024 : 1024.0);
         var schedule = _settings["schedule"] as JsonObject;
         _schedule.IsOn = schedule?["enabled"]?.GetValue<bool>() ?? false;
         _start.Time = TimeSpan.TryParse(schedule?["start"]?.GetValue<string>(), out var a) ? a : new TimeSpan(23, 0, 0);
@@ -214,6 +219,7 @@ public sealed partial class SettingsPage : UserControl
         _connections.ValueChanged += (_, _) => Engine(null, null);
         _parallel.ValueChanged += (_, _) => Engine(null, null);
         _speed.ValueChanged += (_, _) => Engine(null, null);
+        _speedUnit.SelectionChanged += (_, _) => Engine(null, null);
         _schedule.Toggled += Engine;
         _start.TimeChanged += (_, _) => Engine(null, null);
         _stop.TimeChanged += (_, _) => Engine(null, null);
@@ -261,7 +267,7 @@ public sealed partial class SettingsPage : UserControl
             ["categoryFolders"] = _categories.IsOn,
             ["connections"] = N(_connections, 8),
             ["maxParallel"] = N(_parallel, 3),
-            ["speedLimit"] = N(_speed, 0) * 1024,
+            ["speedLimit"] = (long)((double.IsNaN(_speed.Value) ? 0 : _speed.Value) * (_speedUnit.SelectedIndex == 0 ? 1024 * 1024 : 1024)),
             ["schedule"] = new JsonObject
             {
                 ["enabled"] = _schedule.IsOn,

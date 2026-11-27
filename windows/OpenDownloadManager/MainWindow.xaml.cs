@@ -162,11 +162,16 @@ public sealed partial class MainWindow : Window
     private void OnBodySizeChanged(object sender, SizeChangedEventArgs e)
     {
         var narrow = e.NewSize.Width < 860;
+        // When space is short the actions keep their icons and lose their labels, rather than
+        // disappearing into the overflow menu.
+        Actions.DefaultLabelPosition = e.NewSize.Width < 1080 && !narrow || e.NewSize.Width < 480
+            ? CommandBarDefaultLabelPosition.Collapsed
+            : CommandBarDefaultLabelPosition.Right;
         Grid.SetRow(Tools, narrow ? 1 : 0);
         Grid.SetColumn(Tools, narrow ? 0 : 1);
         Grid.SetColumnSpan(Tools, narrow ? 2 : 1);
         Tools.HorizontalAlignment = narrow ? HorizontalAlignment.Stretch : HorizontalAlignment.Right;
-        Search.Width = narrow ? Math.Max(140, e.NewSize.Width - 340) : 220;
+        Search.Width = narrow ? Math.Max(140, e.NewSize.Width - 460) : e.NewSize.Width < 1080 ? 160 : 220;
         if (Tools.Parent != Body && narrow)
         {
             ((Panel)Tools.Parent).Children.Remove(Tools);
@@ -182,6 +187,35 @@ public sealed partial class MainWindow : Window
     /// <summary>The list's width decides which columns fit.</summary>
     private void OnListSizeChanged(object sender, SizeChangedEventArgs e) =>
         ViewSettings.Current.SetListWidth(e.NewSize.Width);
+
+    // ----- the row fill's shimmer -----
+
+    /// <summary>Starts the shimmer that sweeps across a row's fill while bytes arrive.</summary>
+    private void OnRowFillLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Grid fill || fill.Children.Count == 0 || fill.Children[0] is not Microsoft.UI.Xaml.Shapes.Rectangle shine) return;
+        if (shine.RenderTransform is not Microsoft.UI.Xaml.Media.TranslateTransform move) return;
+        var clip = new Microsoft.UI.Xaml.Media.RectangleGeometry();
+        fill.Clip = clip;
+        void Resize()
+        {
+            clip.Rect = new Windows.Foundation.Rect(0, 0, fill.ActualWidth, fill.ActualHeight);
+            var sweep = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+            {
+                From = -shine.Width,
+                To = Math.Max(fill.ActualWidth, 200),
+                Duration = TimeSpan.FromSeconds(1.8),
+                RepeatBehavior = Microsoft.UI.Xaml.Media.Animation.RepeatBehavior.Forever,
+            };
+            var story = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(sweep, move);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(sweep, "X");
+            story.Children.Add(sweep);
+            story.Begin();
+        }
+        fill.SizeChanged += (_, _) => Resize();
+        Resize();
+    }
 
     // ----- progress windows -----
 
@@ -302,7 +336,40 @@ public sealed partial class MainWindow : Window
         foreach (var item in Selected) await Call(new { type = "pause", id = item.Id });
     }
 
-    private async void OnRemoveClick(object sender, RoutedEventArgs e) => await Remove(Selected.ToList(), deleteFile: false);
+    /// <summary>
+    /// Remove asks first: take the downloads off the list and keep the files, or delete the files too.
+    /// Unfinished partial files are deleted either way, since nothing can use them.
+    /// </summary>
+    private async void OnRemoveClick(object sender, RoutedEventArgs e)
+    {
+        var items = Selected.ToList();
+        if (items.Count == 0)
+        {
+            ShowInfo("Check the downloads to remove, or click one first.");
+            return;
+        }
+        var what = items.Count == 1 ? $"\u201c{items[0].DisplayName}\u201d" : $"{items.Count} downloads";
+        var finished = items.Count(i => i.IsCompleted);
+        var dialog = new ContentDialog
+        {
+            Title = items.Count == 1 ? "Remove this download?" : $"Remove {items.Count} downloads?",
+            Content = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                Text = finished == 0
+                    ? $"{what} will be removed from the list and the part already downloaded deleted."
+                    : $"Remove {what} from the list only, or also delete the downloaded file{(finished == 1 ? "" : "s")} from your computer? Unfinished parts are deleted either way.",
+            },
+            PrimaryButtonText = "Remove from list",
+            SecondaryButtonText = finished > 0 ? "Delete files too" : "",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot,
+        };
+        var choice = await dialog.ShowAsync();
+        if (choice == ContentDialogResult.None) return;
+        await Remove(items, deleteFile: choice == ContentDialogResult.Secondary);
+    }
 
     private async void OnResumeAllClick(object sender, RoutedEventArgs e) => await Call(new { type = "resumeAll" });
 
@@ -362,30 +429,75 @@ public sealed partial class MainWindow : Window
             await Windows.System.Launcher.LaunchUriAsync(page);
     }
 
+    /// <summary>
+    /// A speed limit for one download: on or off, an amount, and its unit (MB/s by default), with
+    /// a few common amounts one click away.
+    /// </summary>
     private async void OnItemSpeedLimitClick(object sender, RoutedEventArgs e)
     {
         if (ItemOf(sender) is not { } item) return;
-        var box = new NumberBox
+        const long KB = 1024, MB = 1024 * 1024;
+        var current = item.SpeedLimit;
+        var inMb = current == 0 || current >= MB;
+
+        var limitOn = new ToggleSwitch { Header = "Limit the speed of this download", IsOn = current > 0, OnContent = "On", OffContent = "Off" };
+        var amount = new NumberBox
         {
-            Header = "Speed limit for this download (KB/s, 0 for none)",
-            Minimum = 0,
-            Value = 0,
-            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            Minimum = 1,
+            Maximum = 100_000,
+            Value = current > 0 ? Math.Round(current / (double)(inMb ? MB : KB), 1) : 5,
+            SmallChange = 1,
+            LargeChange = 10,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Hidden,
+            Width = 120,
+            AcceptsExpression = false,
         };
+        var unit = new ComboBox { Items = { "MB/s", "KB/s" }, SelectedIndex = inMb ? 0 : 1, Width = 100 };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { amount, unit } };
+
+        var presets = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        foreach (var mb in new[] { 1, 5, 10, 25, 50 })
+        {
+            var b = new Button { Content = $"{mb} MB/s", Padding = new Thickness(10, 4, 10, 5), FontSize = 12 };
+            b.Click += (_, _) => { amount.Value = mb; unit.SelectedIndex = 0; limitOn.IsOn = true; };
+            presets.Children.Add(b);
+        }
+        var limitPanel = new StackPanel { Spacing = 10, Children = { row, presets } };
+        void Sync() => limitPanel.Opacity = limitOn.IsOn ? 1 : 0.45;
+        limitOn.Toggled += (_, _) => { limitPanel.IsHitTestVisible = limitOn.IsOn; Sync(); };
+        limitPanel.IsHitTestVisible = limitOn.IsOn;
+        Sync();
+
         var dialog = new ContentDialog
         {
-            Title = item.DisplayName,
-            Content = box,
-            PrimaryButtonText = "Set",
+            Title = "Speed limit",
+            Content = new StackPanel
+            {
+                Spacing = 14,
+                MinWidth = 380,
+                Children =
+                {
+                    new TextBlock { Text = item.DisplayName, TextTrimming = TextTrimming.CharacterEllipsis, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Opacity = 0.75 },
+                    limitOn,
+                    limitPanel,
+                    new TextBlock
+                    {
+                        Text = "Applies right away. The limit for all downloads together is in Settings.",
+                        TextWrapping = TextWrapping.Wrap,
+                        Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                        Opacity = 0.75,
+                    },
+                },
+            },
+            PrimaryButtonText = "Apply",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot,
         };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-        {
-            var limit = double.IsNaN(box.Value) ? 0 : (long)box.Value * 1024;
-            await Call(new { type = "setJobSpeedLimit", id = item.Id, limit });
-        }
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        var value = double.IsNaN(amount.Value) ? 0 : amount.Value;
+        var limit = limitOn.IsOn && value > 0 ? (long)(value * (unit.SelectedIndex == 0 ? MB : KB)) : 0;
+        await Call(new { type = "setJobSpeedLimit", id = item.Id, limit });
     }
 
     private void OnCopyAddressClick(object sender, RoutedEventArgs e)

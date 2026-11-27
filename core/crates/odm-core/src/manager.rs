@@ -357,7 +357,8 @@ impl Actor {
 
     async fn run(mut self, mut rx: mpsc::UnboundedReceiver<Msg>) {
         self.schedule();
-        let mut interval = tokio::time::interval(Duration::from_millis(500));
+        // Four updates a second keep progress windows lively; progress is saved every fourth.
+        let mut interval = tokio::time::interval(Duration::from_millis(250));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tokio::select! {
@@ -867,7 +868,7 @@ impl Actor {
 
     fn tick(&mut self) {
         self.ticks += 1;
-        let persist = self.ticks.is_multiple_of(2);
+        let persist = self.ticks.is_multiple_of(4);
         let now = Instant::now();
 
         // Outside the schedule window running downloads go back to the queue.
@@ -904,12 +905,12 @@ impl Actor {
                 }
             }
             let dt = now.duration_since(e.last_at).as_secs_f64();
-            if dt >= 0.4 {
+            if dt >= 0.2 {
                 let instant = downloaded.saturating_sub(e.last_bytes) as f64 / dt;
                 job.speed = if job.speed == 0 {
                     instant as u64
                 } else {
-                    (0.6 * job.speed as f64 + 0.4 * instant) as u64
+                    (0.75 * job.speed as f64 + 0.25 * instant) as u64
                 };
                 e.last_bytes = downloaded;
                 e.last_at = now;

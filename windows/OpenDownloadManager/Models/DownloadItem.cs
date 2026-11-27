@@ -26,6 +26,8 @@ public sealed partial class DownloadItem : ObservableObject
     [ObservableProperty] public partial int Connections { get; set; }
     [ObservableProperty] public partial long Position { get; set; }
     [ObservableProperty] public partial long CreatedAt { get; set; }
+    /// <summary>This download's own speed limit in bytes per second; 0 for none.</summary>
+    [ObservableProperty] public partial long SpeedLimit { get; set; }
     [ObservableProperty] public partial bool AwaitingConfirmation { get; set; }
     /// <summary>Checked in the list, for actions on several downloads at once.</summary>
     [ObservableProperty] public partial bool IsChecked { get; set; }
@@ -74,6 +76,7 @@ public sealed partial class DownloadItem : ObservableObject
         Connections = (int)(Long(j, "connections") ?? 0);
         Position = Long(j, "position") ?? 0;
         CreatedAt = Long(j, "createdAt") ?? 0;
+        SpeedLimit = Long(j, "speedLimit") ?? 0;
         AwaitingConfirmation = j["awaitingConfirmation"]?.GetValue<bool>() ?? false;
 
         OnPropertyChanged(nameof(DisplayName));
@@ -102,6 +105,11 @@ public sealed partial class DownloadItem : ObservableObject
         OnPropertyChanged(nameof(BarText));
         OnPropertyChanged(nameof(StateText));
         OnPropertyChanged(nameof(StateGlyph));
+        OnPropertyChanged(nameof(ProgressText));
+        OnPropertyChanged(nameof(FillScale));
+        OnPropertyChanged(nameof(FillOpacity));
+        OnPropertyChanged(nameof(FillBrush));
+        OnPropertyChanged(nameof(IsShimmering));
         LoadIcon();
     }
 
@@ -112,6 +120,41 @@ public sealed partial class DownloadItem : ObservableObject
         || (State == "paused" && !AwaitingConfirmation && Downloaded > 0);
 
     public bool StateVisible => !BarVisible;
+
+    /// <summary>The progress column's text: "36%", "Paused 36%", "Done" and so on.</summary>
+    public string ProgressText => BarVisible ? (State == "connecting" ? "Connecting" : BarText) : StateText;
+
+    // ----- the row as a progress bar -----
+
+    /// <summary>How far across the row the fill reaches (only X is used).</summary>
+    public System.Numerics.Vector3 FillScale => new(
+        (float)(IsCompleted ? 1 : BarVisible ? (TotalSize is > 0 ? Math.Max(0.004, Progress / 100) : 1) : IsFailed && Downloaded > 0 && TotalSize is > 0 ? Progress / 100 : 0), 1, 1);
+
+    /// <summary>Faint without a known size; fades out once done.</summary>
+    public double FillOpacity => IsCompleted ? 0 : BarVisible ? (TotalSize is > 0 ? 1 : 0.55) : IsFailed ? 1 : 0;
+
+    public bool IsShimmering => State == "downloading";
+
+    private static Brush? _activeFill, _pausedFill, _failedFill;
+
+    /// <summary>The accent colour while running, amber when paused, red when failed; all faint.</summary>
+    public Brush? FillBrush
+    {
+        get
+        {
+            static Brush Tint(string key, byte alpha)
+            {
+                var c = ((Microsoft.UI.Xaml.Media.SolidColorBrush)Microsoft.UI.Xaml.Application.Current.Resources[key]).Color;
+                return new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(alpha, c.R, c.G, c.B));
+            }
+            return State switch
+            {
+                "paused" => _pausedFill ??= Tint("SystemFillColorCautionBrush", 44),
+                "failed" => _failedFill ??= Tint("SystemFillColorCriticalBrush", 40),
+                _ => _activeFill ??= Tint("AccentFillColorDefaultBrush", 52),
+            };
+        }
+    }
 
     public string BarText => State switch
     {

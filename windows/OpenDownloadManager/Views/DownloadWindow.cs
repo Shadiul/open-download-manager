@@ -52,6 +52,18 @@ public sealed class DownloadWindow : Window
 
     /// <summary>Speed samples against progress (0 to 1), for the graph.</summary>
     private readonly List<(double At, double Speed)> _samples = [];
+
+    // The graph animates at about 30 frames a second, easing toward the engine's latest numbers
+    // (which arrive four times a second) and growing one pixel at a time.
+    private bool _animating;
+    private TimeSpan _lastFrame;
+    private double _shownProgress, _shownSpeed, _targetProgress, _targetSpeed, _top;
+    private int _frame;
+    private Rectangle? _doneArea;
+    private PathFigure? _areaFigure;
+    private LineSegment? _areaClose;
+    private Polyline? _line;
+    private Line? _speedLine;
     private JsonArray? _segments;
     private long _total;
     private bool _polling;
@@ -85,7 +97,7 @@ public sealed class DownloadWindow : Window
             Background = Res<Brush>("CardBackgroundFillColorSecondaryBrush"),
             Child = _graph,
         };
-        _graphFrame.SizeChanged += (_, _) => DrawGraph();
+        _graphFrame.SizeChanged += (_, _) => BuildGraph();
         _speedLabel.HorizontalAlignment = HorizontalAlignment.Right;
 
         // ----- facts, label column then value column -----
@@ -153,15 +165,18 @@ public sealed class DownloadWindow : Window
             p.IsResizable = false;
             p.IsMaximizable = false;
         }
+        CenterOnScreen();
         ViewSettings.Current.Track(this);
 
         _item.PropertyChanged += OnItemChanged;
         _timer = DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(700);
         _timer.Tick += async (_, _) => await Poll();
+
         Closed += (_, _) =>
         {
             _timer.Stop();
+            StopAnimation();
             _item.PropertyChanged -= OnItemChanged;
         };
         Refresh();
@@ -269,8 +284,18 @@ public sealed class DownloadWindow : Window
         ToolTipService.SetToolTip(_close, done ? null : "Close this window; the download carries on");
         _detailsToggle.Visibility = i.Kind == "video" ? Visibility.Collapsed : Visibility.Visible;
 
-        Sample();
-        DrawGraph();
+        // The graph eases toward these on its own timer.
+        if (done) _targetProgress = 1;
+        else if (i.TotalSize is > 0) _targetProgress = i.Downloaded / (double)i.TotalSize.Value;
+        _targetSpeed = i.State == "downloading" ? i.Speed : 0;
+        if (_targetProgress + 0.01 < _shownProgress)
+        {
+            // The download started over: so does the graph.
+            _samples.Clear();
+            _shownProgress = 0;
+            BuildGraph();
+        }
+        if (i.State == "downloading" || Math.Abs(_targetProgress - _shownProgress) > 0.0005) StartAnimation();
         if (done)
         {
             _timer?.Stop();
@@ -280,63 +305,139 @@ public sealed class DownloadWindow : Window
 
     // ----- the speed graph -----
 
-    /// <summary>Records the current speed against how far the download has got.</summary>
-    private void Sample()
-    {
-        var i = _item;
-        if (i.State != "downloading" || i.Speed <= 0) return;
-        double at = i.TotalSize is > 0 ? i.Downloaded / (double)i.TotalSize.Value : Math.Min(0.98, _samples.Count / 300.0);
-        if (_samples.Count > 0 && at < _samples[^1].At) _samples.Clear(); // the download restarted
-        _samples.Add((at, i.Speed));
-        if (_samples.Count > 600) _samples.RemoveAt(0);
-    }
-
     /// <summary>
-    /// Speed as a filled line across the progress, like the file copy dialog: the left part is
-    /// shaded up to how far the download has got, and a line marks the current speed.
+    /// Creates the graph's shapes: faint grid lines, the shaded part already downloaded, the speed
+    /// as a filled line across the progress, and a line at the current speed. Animate() then
+    /// changes them in place.
     /// </summary>
-    private void DrawGraph()
+    private void BuildGraph()
     {
         _graph.Children.Clear();
         double w = _graphFrame.ActualWidth - 2, h = _graphFrame.ActualHeight - 2;
         if (w <= 0 || h <= 0) return;
         var accent = Res<SolidColorBrush>("AccentFillColorDefaultBrush").Color;
-        var done = _item.IsCompleted;
-        var progress = done ? 1 : _item.TotalSize is > 0 ? _item.Downloaded / (double)_item.TotalSize.Value : _samples.Count > 0 ? _samples[^1].At : 0;
-
-        // Faint grid lines, as in the copy dialog.
         for (var k = 1; k < 4; k++)
             _graph.Children.Add(new Line { X1 = 0, X2 = w, Y1 = h * k / 4, Y2 = h * k / 4, Stroke = Res<Brush>("DividerStrokeColorDefaultBrush"), StrokeThickness = 1 });
-
-        // The part already downloaded, shaded.
-        _graph.Children.Add(new Rectangle { Width = Math.Max(0, w * progress), Height = h, Fill = new SolidColorBrush(Windows.UI.Color.FromArgb(28, accent.R, accent.G, accent.B)) });
-
-        var speedNow = _item.State == "downloading" ? _item.Speed : 0;
-        // A space keeps the label's height, so nothing below it moves.
-        _speedLabel.Text = speedNow > 0 ? $"Speed: {Format.Speed(speedNow)}" : " ";
-        if (_samples.Count < 2) return;
-
-        var top = Math.Max(_samples.Max(s => s.Speed), speedNow) * 1.25;
-        Point P((double At, double Speed) s) => new(s.At * w, h - s.Speed / top * h);
-
-        var area = new PathFigure { StartPoint = new Point(_samples[0].At * w, h), IsClosed = true };
-        foreach (var s in _samples) area.Segments.Add(new LineSegment { Point = P(s) });
-        area.Segments.Add(new LineSegment { Point = new Point(_samples[^1].At * w, h) });
+        _doneArea = new Rectangle { Height = h, Width = w * _shownProgress, Fill = new SolidColorBrush(Windows.UI.Color.FromArgb(28, accent.R, accent.G, accent.B)) };
+        _areaFigure = new PathFigure { IsClosed = true };
+        _graph.Children.Add(_doneArea);
         _graph.Children.Add(new Microsoft.UI.Xaml.Shapes.Path
         {
-            Data = new PathGeometry { Figures = { area } },
+            Data = new PathGeometry { Figures = { _areaFigure } },
             Fill = new SolidColorBrush(Windows.UI.Color.FromArgb(90, accent.R, accent.G, accent.B)),
         });
+        _line = new Polyline { Stroke = new SolidColorBrush(accent), StrokeThickness = 1.5, StrokeLineJoin = PenLineJoin.Round };
+        _graph.Children.Add(_line);
+        _speedLine = new Line { X1 = 0, X2 = w, Stroke = Res<Brush>("TextFillColorSecondaryBrush"), StrokeThickness = 1, Opacity = 0, };
+        _graph.Children.Add(_speedLine);
+        Replot();
+        Animate(0);
+    }
 
-        var line = new Polyline { Stroke = new SolidColorBrush(accent), StrokeThickness = 1.5, StrokeLineJoin = PenLineJoin.Round };
-        foreach (var s in _samples) line.Points.Add(P(s));
-        _graph.Children.Add(line);
+    // The graph draws on the display's frame clock (60 frames a second on most screens).
+    private void StartAnimation()
+    {
+        if (_animating) return;
+        _animating = true;
+        _lastFrame = TimeSpan.Zero;
+        CompositionTarget.Rendering += OnFrame;
+    }
 
-        if (speedNow > 0)
+    private void StopAnimation()
+    {
+        if (!_animating) return;
+        _animating = false;
+        CompositionTarget.Rendering -= OnFrame;
+    }
+
+    private void OnFrame(object? sender, object e)
+    {
+        var now = e is RenderingEventArgs r ? r.RenderingTime : TimeSpan.Zero;
+        var dt = _lastFrame == TimeSpan.Zero ? 1 / 60.0 : Math.Clamp((now - _lastFrame).TotalSeconds, 0, 0.1);
+        if (dt <= 0) return; // the same frame reported twice
+        _lastFrame = now;
+        Animate(dt);
+    }
+
+    /// <summary>Plots every sample again, after the size or the speed scale changed.</summary>
+    private void Replot()
+    {
+        if (_areaFigure is null || _line is null) return;
+        double w = _graphFrame.ActualWidth - 2, h = _graphFrame.ActualHeight - 2;
+        _areaFigure.Segments.Clear();
+        _line.Points.Clear();
+        _areaClose = null;
+        if (_samples.Count == 0) return;
+        _top = Math.Max(_top, _samples.Max(x => x.Speed) * 1.3);
+        _areaFigure.StartPoint = new Point(_samples[0].At * w, h);
+        foreach (var sample in _samples)
         {
-            var y = h - speedNow / top * h;
-            _graph.Children.Add(new Line { X1 = 0, X2 = w, Y1 = y, Y2 = y, Stroke = Res<Brush>("TextFillColorSecondaryBrush"), StrokeThickness = 1, Opacity = 0.6 });
+            var pt = PointOf(sample, w, h);
+            _areaFigure.Segments.Add(new LineSegment { Point = pt });
+            _line.Points.Add(pt);
         }
+        _areaClose = new LineSegment { Point = new Point(_samples[^1].At * w, h) };
+        _areaFigure.Segments.Add(_areaClose);
+    }
+
+    private Point PointOf((double At, double Speed) sample, double w, double h) =>
+        new(sample.At * w, h - (_top > 0 ? sample.Speed / _top * h : 0));
+
+    /// <summary>One frame: ease toward the latest numbers and grow the line by whole pixels.</summary>
+    private void Animate(double dt)
+    {
+        double w = _graphFrame.ActualWidth - 2, h = _graphFrame.ActualHeight - 2;
+        if (w <= 0 || h <= 0 || _doneArea is null || _areaFigure is null || _line is null || _speedLine is null) return;
+        _frame++;
+
+        // Without a known size, the graph creeps forward while bytes arrive.
+        if (_item.TotalSize is not > 0 && _targetSpeed > 0) _targetProgress = Math.Min(0.98, _targetProgress + 0.018 * dt);
+        // Exponential easing by elapsed time: the same feel at any frame rate.
+        var ease = dt <= 0 ? 1 : 1 - Math.Exp(-dt / 0.14);
+        _shownProgress += (_targetProgress - _shownProgress) * ease;
+        _shownSpeed += (_targetSpeed - _shownSpeed) * ease;
+        if (Math.Abs(_targetProgress - _shownProgress) < 0.0002) _shownProgress = _targetProgress;
+
+        if (_targetSpeed > 0 && (_samples.Count == 0 || (_shownProgress - _samples[^1].At) * w >= 1))
+        {
+            var sample = (_shownProgress, _shownSpeed);
+            _samples.Add(sample);
+            if (_shownSpeed * 1.1 > _top || _samples.Count == 1)
+            {
+                // A new peak: widen the scale with headroom and replot.
+                _top = _shownSpeed * 1.4;
+                Replot();
+            }
+            else
+            {
+                var pt = PointOf(sample, w, h);
+                if (_areaFigure.Segments.Count == 0) _areaFigure.StartPoint = new Point(pt.X, h);
+                if (_areaClose is not null) _areaFigure.Segments.Remove(_areaClose);
+                _areaFigure.Segments.Add(new LineSegment { Point = pt });
+                _areaClose = new LineSegment { Point = new Point(pt.X, h) };
+                _areaFigure.Segments.Add(_areaClose);
+                _line.Points.Add(pt);
+            }
+        }
+
+        _doneArea.Width = Math.Max(0, w * _shownProgress);
+        if (_shownSpeed > 1 && _top > 0)
+        {
+            var y = h - Math.Min(1, _shownSpeed / _top) * h;
+            _speedLine.Y1 = _speedLine.Y2 = y;
+            _speedLine.Opacity = 0.6;
+        }
+        else
+        {
+            _speedLine.Opacity = 0;
+        }
+
+        // The number changes a few times a second, so it stays readable.
+        if (_frame % 12 == 0 || _targetSpeed == 0)
+            _speedLabel.Text = _targetSpeed > 0 ? $"Speed: {Format.Speed((long)_shownSpeed)}" : " ";
+
+        var settled = _targetSpeed == 0 && Math.Abs(_targetProgress - _shownProgress) < 0.0002 && _shownSpeed < 1;
+        if (settled) StopAnimation();
     }
 
     // ----- more details -----
@@ -474,9 +575,35 @@ public sealed class DownloadWindow : Window
         Close();
     }
 
+    private static int _openCount;
+
+    /// <summary>Centred on screen; several at once step down and right so each stays visible.</summary>
+    private void CenterOnScreen()
+    {
+        var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        var size = AppWindow.Size;
+        var step = 32 * (_openCount++ % 6);
+        Closed += (_, _) => _openCount = Math.Max(0, _openCount - 1);
+        AppWindow.Move(new Windows.Graphics.PointInt32(area.X + (area.Width - size.Width) / 2 + step, area.Y + (area.Height - size.Height) / 2 + step));
+    }
+
+    /// <summary>
+    /// Brings the window to the front with focus. A double-click in the list finishes after this
+    /// runs and would pull the main window back on top, so it is done again once input settles.
+    /// </summary>
     public void ShowOnTop()
     {
         if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } p) p.Restore();
         Activate();
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            AppWindow.MoveInZOrderAtTop();
+            SetForegroundWindow(hwnd);
+            Activate();
+        });
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hwnd);
 }
