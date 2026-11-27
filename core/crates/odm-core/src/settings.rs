@@ -45,6 +45,10 @@ impl Settings {
     /// Brings out-of-range values back into range.
     pub fn normalized(mut self) -> Self {
         self.connections = self.connections.clamp(1, MAX_CONNECTIONS);
+        // A folder that is not a full path (a stray edit) falls back to the default folder.
+        if !std::path::Path::new(self.download_dir.trim()).is_absolute() {
+            self.download_dir.clear();
+        }
         self.max_parallel = self.max_parallel.clamp(1, 20);
         self
     }
@@ -128,5 +132,7 @@ mod tests {
         let s: Settings = serde_json::from_str(r#"{ "connections": 99 }"#).unwrap();
         assert_eq!(s.clone().normalized().connections, MAX_CONNECTIONS);
         assert_eq!(s.max_parallel, 3);
+        let s: Settings = serde_json::from_str(r#"{ "downloadDir": "s tC:/Users/me/Downloads" }"#).unwrap();
+        assert_eq!(s.normalized().download_dir, "", "a path that is not absolute is dropped");
     }
 }
