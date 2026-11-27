@@ -11,6 +11,8 @@ namespace OpenDownloadManager.ViewModels;
 public sealed partial class MainViewModel : ObservableObject
 {
     private readonly Dictionary<ulong, DownloadItem> _items = [];
+    /// <summary>Downloads whose start was announced (and its progress window shown) this session.</summary>
+    private readonly HashSet<ulong> _announced = [];
 
     public CoreClient Core { get; }
     public AppSettings AppSettings { get; }
@@ -150,7 +152,10 @@ public sealed partial class MainViewModel : ObservableObject
                     if (wasPosition != item.Position || wasState != item.State || wasName != item.DisplayName
                         || Matches(item) != Visible.Contains(item))
                         Place(item);
-                    if (wasState is "queued" or "paused" && item.State == "connecting") Started?.Invoke(item);
+                    // Only a download's first start, with nothing fetched yet, counts: resuming one is not a
+                    // new download, so its progress window does not pop up again.
+                    if (wasState is "queued" or "paused" && item.State == "connecting" && item.Downloaded == 0 && _announced.Add(id))
+                        Started?.Invoke(item);
                     if (wasState != "completed" && item.State == "completed") Completed?.Invoke(item);
                     if (wasState != "failed" && item.State == "failed") Failed?.Invoke(item);
                     break;

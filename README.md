@@ -62,7 +62,7 @@ have the right to download: it does not get around DRM, paywalls, or logins you 
   <img src="docs/screenshots/app-dark.png" alt="The download list in dark theme" width="760">
 </p>
 <p align="center">
-  <img src="docs/screenshots/progress-window.png" alt="A download's progress window with its speed graph" width="420">
+  <img src="docs/screenshots/progress-window.png" alt="A download's progress window: its speed graph and each connection's part of the file" width="420">
 </p>
 
 ## Browser extension
@@ -117,7 +117,7 @@ You need the Rust toolchain (1.88 or later, MSVC), the Visual Studio C++ build t
 SDK, and Node.js 22.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\fetch-tools.ps1   # yt-dlp, ffmpeg (LGPL) and deno, hash-checked
+powershell -ExecutionPolicy Bypass -File scripts\fetch-tools.ps1   # yt-dlp and ffmpeg (LGPL), hash-checked
 dotnet build windows\OpenDownloadManager -c Release
 windows\OpenDownloadManager\bin\Release\net9.0-windows10.0.26100.0\win-x64\OpenDownloadManager.exe
 ```
@@ -179,4 +179,6 @@ Issues and pull requests are welcome.
 
 Bundled tools: [yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense), an LGPL build of
 [FFmpeg](https://github.com/BtbN/FFmpeg-Builds) that runs as a separate program, and
-[Deno](https://github.com/denoland/deno) (MIT), the JavaScript runtime yt-dlp uses for YouTube.
+[Deno](https://github.com/denoland/deno) (MIT), the JavaScript runtime yt-dlp uses for YouTube. Deno
+is not in the installer: the app downloads it, and checks its checksum, the first time a YouTube
+video needs it.

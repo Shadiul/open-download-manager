@@ -2,9 +2,10 @@
 # SHA-256 list its project publishes with the release.
 #
 #   yt-dlp\yt-dlp.exe      https://github.com/yt-dlp/yt-dlp (Unlicense), the folder build
-#   ffmpeg.exe, ffprobe.exe https://github.com/BtbN/FFmpeg-Builds, LGPL build
-#   deno.exe                https://github.com/denoland/deno (MIT), the JavaScript runtime
-#                           yt-dlp needs for full YouTube support
+#   ffmpeg.exe, ffprobe.exe https://github.com/BtbN/FFmpeg-Builds, LGPL shared build (+ its DLLs)
+#
+# deno, the JavaScript runtime yt-dlp needs for YouTube, is not bundled: the app fetches it the
+# first time a YouTube video needs it (see ensure_js_runtime in core/crates/odm-core/src/video.rs).
 #
 # Usage: powershell -ExecutionPolicy Bypass -File scripts\fetch-tools.ps1 [-Force]
 param([switch]$Force)
@@ -48,33 +49,26 @@ if ($Force -or -not (Test-Path $ytdlp)) {
     if (Test-Path $old) { Remove-Item $old -Force }
 } else { Write-Host "yt-dlp already present (use -Force to refresh)" }
 
+# The shared build: ffmpeg.exe and ffprobe.exe use one set of codec DLLs instead of each carrying
+# its own copy (about 150 MB less than the static build).
 $ffmpeg = Join-Path $tools 'ffmpeg.exe'
-if ($Force -or -not (Test-Path $ffmpeg)) {
+$shared = Get-ChildItem $tools -Filter 'avcodec-*.dll' -ErrorAction SilentlyContinue
+if ($Force -or -not (Test-Path $ffmpeg) -or -not $shared) {
     $base = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest'
-    $zipName = 'ffmpeg-master-latest-win64-lgpl.zip'
+    $zipName = 'ffmpeg-master-latest-win64-lgpl-shared.zip'
     $zip = Join-Path $work $zipName
     Get-Checked "$base/$zipName" "$base/checksums.sha256" $zipName $zip
     $unpacked = Join-Path $work 'ffmpeg'
     if (Test-Path $unpacked) { Remove-Item $unpacked -Recurse -Force }
     Expand-Archive $zip $unpacked
-    $bin = Get-ChildItem $unpacked -Recurse -Filter 'ffmpeg.exe' | Select-Object -First 1
-    Copy-Item $bin.FullName $tools -Force
-    Copy-Item (Join-Path $bin.DirectoryName 'ffprobe.exe') $tools -Force
+    $bin = (Get-ChildItem $unpacked -Recurse -Filter 'ffmpeg.exe' | Select-Object -First 1).DirectoryName
+    Get-ChildItem $tools -Filter '*.dll' | Remove-Item -Force
+    foreach ($exe in 'ffmpeg.exe', 'ffprobe.exe') { Copy-Item (Join-Path $bin $exe) $tools -Force }
+    Get-ChildItem $bin -Filter '*.dll' | Copy-Item -Destination $tools -Force
     $license = Get-ChildItem $unpacked -Recurse -Filter 'LICENSE*' | Select-Object -First 1
     if ($license) { Copy-Item $license.FullName (Join-Path $tools 'ffmpeg-LICENSE.txt') -Force }
-} else { Write-Host "ffmpeg.exe already present (use -Force to refresh)" }
-
-$deno = Join-Path $tools 'deno.exe'
-if ($Force -or -not (Test-Path $deno)) {
-    $base = 'https://github.com/denoland/deno/releases/latest/download'
-    $zipName = 'deno-x86_64-pc-windows-msvc.zip'
-    $zip = Join-Path $work $zipName
-    Get-Checked "$base/$zipName" "$base/$zipName.sha256sum" $zipName $zip
-    Expand-Archive $zip $work -Force
-    Copy-Item (Join-Path $work 'deno.exe') $tools -Force
-} else { Write-Host "deno.exe already present (use -Force to refresh)" }
+} else { Write-Host "ffmpeg already present (use -Force to refresh)" }
 
 Remove-Item $work -Recurse -Force
 & $ytdlp --version | ForEach-Object { Write-Host "yt-dlp $_" }
-& $deno --version | Select-Object -First 1 | ForEach-Object { Write-Host $_ }
 & $ffmpeg -hide_banner -version | Select-Object -First 1 | ForEach-Object { Write-Host $_ }

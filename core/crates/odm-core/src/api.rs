@@ -49,6 +49,8 @@ impl Core {
     pub fn start(config: CoreConfig, sink: JsonSink) -> Result<Self, String> {
         std::fs::create_dir_all(&config.data_dir)
             .map_err(|e| format!("Cannot create {}: {e}", config.data_dir.display()))?;
+        // Tools fetched when first needed (deno) go here, so app updates keep them.
+        crate::video::set_runtime_dir(config.data_dir.join("tools"));
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(4)
             .thread_name("odm-core")

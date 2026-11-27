@@ -22,17 +22,19 @@ $out = Join-Path $dist 'release'
 foreach ($dir in $app, $out) { if (Test-Path $dir) { Remove-Item $dir -Recurse -Force } }
 New-Item -ItemType Directory -Force $out | Out-Null
 
-# yt-dlp, ffmpeg and deno, checked against their published hashes.
+# yt-dlp and ffmpeg, checked against their published hashes.
 & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'fetch-tools.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'fetch-tools failed' }
 
 # The app, self-contained: the Rust core and host are built by the project file.
 dotnet publish windows\OpenDownloadManager -c Release -o $app
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed' }
-foreach ($needed in 'OpenDownloadManager.exe', 'odm.dll', 'odm-host.exe', 'tools\yt-dlp\yt-dlp.exe', 'tools\ffmpeg.exe', 'tools\deno.exe') {
+foreach ($needed in 'OpenDownloadManager.exe', 'odm.dll', 'odm-host.exe', 'tools\yt-dlp\yt-dlp.exe', 'tools\ffmpeg.exe') {
     if (-not (Test-Path (Join-Path $app $needed))) { throw "The published app is missing $needed" }
 }
 Copy-Item LICENSE (Join-Path $app 'LICENSE.txt')
+# deno is not shipped: the app fetches it the first time a YouTube video needs it.
+Remove-Item (Join-Path $app 'tools\deno.exe') -ErrorAction SilentlyContinue
 
 Compress-Archive -Path (Join-Path $app '*') -DestinationPath (Join-Path $out "OpenDownloadManager-$version-portable-x64.zip") -CompressionLevel Optimal
 

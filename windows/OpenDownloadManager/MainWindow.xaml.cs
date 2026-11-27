@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -20,6 +20,7 @@ public sealed partial class MainWindow : Window
     {
         ViewModel = viewModel;
         InitializeComponent();
+        ShowDensity();
         // The Pause/Resume button follows the selection and the downloads' states; a light poll
         // covers both without wiring every item.
         var pauseResume = DispatcherQueue.CreateTimer();
@@ -30,6 +31,8 @@ public sealed partial class MainWindow : Window
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+        // The caption buttons at their standard height, matching the 32 px title row.
+        AppWindow.TitleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Standard;
         AppWindow.SetIcon(AppPaths.IconPath);
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 700));
         if (AppWindow.Presenter is OverlappedPresenter p)
@@ -55,9 +58,12 @@ public sealed partial class MainWindow : Window
     private void OnSearchChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args) =>
         ViewModel.SearchText = sender.Text;
 
-    private void OnStatusFilterChanged(object sender, SelectionChangedEventArgs e)
+    private void OnStatusFilterClick(object sender, RoutedEventArgs e)
     {
-        if (StatusBox.SelectedItem is ComboBoxItem { Tag: string tag }) ViewModel.StatusFilter = tag;
+        if (sender is not RadioMenuFlyoutItem { Tag: string tag } item) return;
+        ViewModel.StatusFilter = tag;
+        StatusDot.Visibility = tag == "any" ? Visibility.Collapsed : Visibility.Visible;
+        ToolTipService.SetToolTip(StatusButton, $"Show: {item.Text.ToLowerInvariant()}");
     }
 
     private void OnSortClick(object sender, RoutedEventArgs e)
@@ -89,13 +95,6 @@ public sealed partial class MainWindow : Window
         ColSpeed.IsChecked = v.ShowSpeed;
         ColTimeLeft.IsChecked = v.ShowTimeLeft;
         ColAdded.IsChecked = v.ShowAdded;
-        DensityCompact.IsChecked = v.Density == "compact";
-        DensityStandard.IsChecked = v.Density == "standard";
-        DensityComfortable.IsChecked = v.Density == "comfortable";
-        ThemeSystem.IsChecked = v.Theme == "system";
-        ThemeLight.IsChecked = v.Theme == "light";
-        ThemeDark.IsChecked = v.Theme == "dark";
-        ProgressWindows.IsChecked = ViewModel.AppSettings.ShowProgressWindow;
     }
 
     private void OnColumnToggle(object sender, RoutedEventArgs e)
@@ -112,20 +111,22 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnDensityClick(object sender, RoutedEventArgs e)
+    private static readonly string[] Densities = ["compact", "standard", "comfortable"];
+
+    /// <summary>Steps to the next row density: compact, standard, comfortable, and round again.</summary>
+    private void OnDensityToggle(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { Tag: string density }) ViewSettings.Current.Density = density;
+        var v = ViewSettings.Current;
+        v.Density = Densities[(Array.IndexOf(Densities, v.Density) + 1) % Densities.Length];
+        ShowDensity();
     }
 
-    private void OnThemeClick(object sender, RoutedEventArgs e)
+    private void ShowDensity()
     {
-        if (sender is FrameworkElement { Tag: string theme }) ViewSettings.Current.Theme = theme;
-    }
-
-    private void OnProgressWindowsToggle(object sender, RoutedEventArgs e)
-    {
-        ViewModel.AppSettings.ShowProgressWindow = ProgressWindows.IsChecked;
-        try { ViewModel.AppSettings.Save(); } catch { }
+        var current = ViewSettings.Current.Density;
+        var next = Densities[(Array.IndexOf(Densities, current) + 1) % Densities.Length];
+        static string Name(string d) => char.ToUpperInvariant(d[0]) + d[1..];
+        ToolTipService.SetToolTip(DensityButton, $"Rows: {Name(current)}. Click for {Name(next)}.");
     }
 
     // ----- selection -----
@@ -165,30 +166,47 @@ public sealed partial class MainWindow : Window
 
     // ----- responsive layout -----
 
-    /// <summary>Narrow windows put search and view options on their own row.</summary>
+    /// <summary>Widths of each side of the toolbar with its labels.</summary>
+    private const double LabelledActionsWidth = 312, LabelledToolsWidth = 236;
+
+    /// <summary>
+    /// The search stays centred, so each side gets half of what it leaves. Labels show where they
+    /// fit: the filter, columns and view buttons first, then the actions; otherwise those become
+    /// icon buttons. Narrow windows give the search a row of its own.
+    /// </summary>
     private void OnBodySizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var narrow = e.NewSize.Width < 860;
-        // When space is short the actions keep their icons and lose their labels, rather than
-        // disappearing into the overflow menu.
-        var labels = !(e.NewSize.Width < 1040 && !narrow || e.NewSize.Width < 440);
+        var width = e.NewSize.Width;
+        var narrow = width < 620;
+        const double minSearch = 170, gap = 8;
+        bool Fits(double side) => width - 2 * (side + gap) >= minSearch;
+        bool toolLabels, actionLabels;
+        if (narrow)
+        {
+            // The search has its own row, so each side has the whole width to share.
+            toolLabels = width >= LabelledToolsWidth + 36 * 4 + 40;
+            actionLabels = width >= LabelledToolsWidth + LabelledActionsWidth + 16;
+            Search.Width = double.NaN;
+            Search.HorizontalAlignment = HorizontalAlignment.Stretch;
+            Grid.SetRow(Search, 1);
+            Grid.SetColumn(Search, 0);
+            Grid.SetColumnSpan(Search, 3);
+        }
+        else
+        {
+            toolLabels = Fits(LabelledToolsWidth);
+            actionLabels = toolLabels && Fits(Math.Max(LabelledToolsWidth, LabelledActionsWidth));
+            var side = Math.Max(toolLabels ? LabelledToolsWidth : 116, actionLabels ? LabelledActionsWidth : 180);
+            Search.Width = Math.Clamp(width - 2 * (side + gap), minSearch, 320);
+            Search.HorizontalAlignment = HorizontalAlignment.Center;
+            Grid.SetRow(Search, 0);
+            Grid.SetColumn(Search, 1);
+            Grid.SetColumnSpan(Search, 1);
+        }
+        foreach (var label in new[] { LabelFilter, LabelColumns })
+            label.Visibility = toolLabels ? Visibility.Visible : Visibility.Collapsed;
         foreach (var label in new[] { LabelAdd, LabelPauseResume, LabelRemove })
-            label.Visibility = labels ? Visibility.Visible : Visibility.Collapsed;
-        Grid.SetRow(Tools, narrow ? 1 : 0);
-        Grid.SetColumn(Tools, narrow ? 0 : 1);
-        Grid.SetColumnSpan(Tools, narrow ? 2 : 1);
-        Tools.HorizontalAlignment = narrow ? HorizontalAlignment.Stretch : HorizontalAlignment.Right;
-        Search.Width = narrow ? Math.Max(140, e.NewSize.Width - 460) : e.NewSize.Width < 1040 ? 180 : 220;
-        if (Tools.Parent != Body && narrow)
-        {
-            ((Panel)Tools.Parent).Children.Remove(Tools);
-            Body.Children.Add(Tools);
-        }
-        else if (Tools.Parent == Body && !narrow)
-        {
-            Body.Children.Remove(Tools);
-            Toolbar.Children.Add(Tools);
-        }
+            label.Visibility = actionLabels ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>The list's width decides which columns fit.</summary>
@@ -200,28 +218,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Starts the shimmer that sweeps across a row's fill while bytes arrive.</summary>
     private void OnRowFillLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not Grid fill || fill.Children.Count == 0 || fill.Children[0] is not Microsoft.UI.Xaml.Shapes.Rectangle shine) return;
-        if (shine.RenderTransform is not Microsoft.UI.Xaml.Media.TranslateTransform move) return;
-        var clip = new Microsoft.UI.Xaml.Media.RectangleGeometry();
-        fill.Clip = clip;
-        void Resize()
-        {
-            clip.Rect = new Windows.Foundation.Rect(0, 0, fill.ActualWidth, fill.ActualHeight);
-            var sweep = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
-            {
-                From = -shine.Width,
-                To = Math.Max(fill.ActualWidth, 200),
-                Duration = TimeSpan.FromSeconds(1.8),
-                RepeatBehavior = Microsoft.UI.Xaml.Media.Animation.RepeatBehavior.Forever,
-            };
-            var story = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
-            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(sweep, move);
-            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(sweep, "X");
-            story.Children.Add(sweep);
-            story.Begin();
-        }
-        fill.SizeChanged += (_, _) => Resize();
-        Resize();
+        if (sender is Grid fill) Views.RowFill.Attach(fill);
     }
 
     // ----- progress windows -----
