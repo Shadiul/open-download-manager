@@ -19,6 +19,10 @@ Every message carries `"v": 1`.
 
 Reply: `{ "ok": true, "version": "1.2.0" }`
 
+When the app is installed but not running, the host answers a ping itself with
+`{ "ok": true, "version": "…", "running": false }` and does not start the app. A `download`,
+`batch` or `probe` starts it in the tray first.
+
 ## download
 
 ```json
@@ -77,3 +81,20 @@ Reply:
 ```
 
 `size` may be left out. If the reply is not `ok`, the menu offers "Best quality" only.
+
+## batch
+
+Sent by "Download all links". `items` holds download messages without `v` or `type`.
+
+```json
+{ "v": 1, "type": "batch", "items": [ { "url": "https://example.com/a.zip", "referrer": "https://example.com/", "cookies": "..." } ] }
+```
+
+Reply: `{ "ok": true }` once the app has queued them.
+
+## How the real host reaches the app
+
+`odm-host.exe` (built from `core/crates/odm-host`) relays each message, unchanged, to the app over
+the per-user named pipe `\\.\pipe\OpenDownloadManager-<user name>` with the same 4-byte length
+framing, and relays the reply back. It starts `OpenDownloadManager.exe --background` from its own
+folder when the pipe is not there. The app registers the host for Chrome and Edge on every start.

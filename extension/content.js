@@ -185,4 +185,16 @@
   const scanSoon = () => { clearTimeout(scanTimer); scanTimer = setTimeout(scan, 300); };
   new MutationObserver(scanSoon).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
   document.addEventListener('loadedmetadata', scan, true);
+
+  // ----- "Download all links" and Alt+click -----
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type !== 'collect-links') return false;
+    sendResponse([...document.links].map((a) => ({ url: a.href, text: a.textContent || '' })));
+    return false;
+  });
+
+  // Alt+click downloads a link in the browser itself; leave that download to the browser.
+  document.addEventListener('click', (e) => {
+    if (e.altKey && e.target instanceof Element && e.target.closest('a[href]')) send({ type: 'skip-next-download' });
+  }, true);
 })();

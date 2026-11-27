@@ -1,6 +1,7 @@
 import { classifyMedia, totalFromContentRange, mediaKey, filenameFromUrl } from './lib/media.js';
 import { shouldCatch, DEFAULT_SETTINGS } from './lib/rules.js';
 import { sendToHost, pingHost } from './lib/native.js';
+import { pickFileLinks } from './lib/links.js';
 import { pageDownloadUrl as anyPageUrl, isSplitStream } from './lib/sites.js';
 import { YOUTUBE_ENABLED } from './lib/build-flags.js';
 
@@ -62,9 +63,15 @@ async function handOff(jobInput) {
 
 // Downloads we let go back to the browser, so we don't catch them twice.
 const released = new Set();
+// Alt+click on a link leaves that download to the browser.
+let skipUntil = 0;
 
 chrome.downloads.onCreated.addListener(async (item) => {
   if (released.has(item.id)) return;
+  if (Date.now() < skipUntil) {
+    skipUntil = 0;
+    return;
+  }
   const settings = await getSettings();
   const decision = shouldCatch(item, settings, chrome.runtime.id);
   if (!decision.catch) return;
@@ -186,9 +193,46 @@ chrome.runtime.onInstalled.addListener(() => {
     title: 'Download with Open Download Manager',
     contexts: ['link', 'video', 'audio', 'image']
   });
+  chrome.contextMenus.create({
+    id: 'dl-all',
+    title: 'Download all links with Open Download Manager',
+    contexts: ['page']
+  });
 });
 
+/** Sends every file link on the page to the app in one batch. */
+async function downloadAllLinks(tab) {
+  let links = [];
+  try {
+    links = await chrome.tabs.sendMessage(tab.id, { type: 'collect-links' }, { frameId: 0 });
+  } catch {
+    flashBadge('!', '#c62828'); // no content script on this page (browser pages, the Web Store)
+    return;
+  }
+  const settings = await getSettings();
+  const files = pickFileLinks(links || [], settings.extensions);
+  if (files.length === 0) {
+    flashBadge('0', '#757575');
+    return;
+  }
+  try {
+    const items = [];
+    for (const f of files) {
+      const job = await buildJob({ url: f.url, referrer: tab.url, source: 'context-menu', tabId: tab.id, pageTitle: tab.title });
+      delete job.type;
+      items.push(job);
+    }
+    const reply = await sendToHost({ type: 'batch', items });
+    if (!reply.ok) throw new Error(reply.error || 'refused');
+    flashBadge(String(files.length), '#1f8a3b');
+  } catch (e) {
+    console.warn('[odm] download all links failed:', e.message);
+    flashBadge('!', '#c62828');
+  }
+}
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === 'dl-all') return downloadAllLinks(tab);
   const url = info.srcUrl && !info.srcUrl.startsWith('blob:') ? info.srcUrl : info.linkUrl;
   if (!url || !/^https?:/i.test(url)) {
     flashBadge('!', '#c62828');
@@ -215,6 +259,10 @@ async function handleMessage(msg, sender) {
   switch (msg.type) {
     case 'ping-host':
       return pingHost();
+
+    case 'skip-next-download':
+      skipUntil = Date.now() + 5000;
+      return { ok: true };
 
     case 'get-settings':
       return getSettings();

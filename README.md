@@ -1,78 +1,92 @@
-# Open Download Manager (browser extension)
+# Open Download Manager
 
-A Chrome and Edge extension (Manifest V3, two builds, see below) that hands downloads and videos to the
-Open Download Manager desktop app on Windows 11 through native messaging.
+An open source download manager for Windows 11, with a Chrome and Edge extension that hands it
+your downloads and videos. Fast segmented downloads, pause and resume that survive a restart, a
+queue with a schedule, and video downloads from YouTube and other sites through yt-dlp.
 
-What it does:
+It is for files and videos you have the right to download. It does not bypass DRM, paywalls or
+logins you do not have.
 
-- **Catches browser downloads.** When a download starts, the extension pauses it, sends it to the
-  download manager with the page's cookies, referrer and user agent, and cancels the browser's
-  copy once the app accepts it. If the app is not installed, not running, or refuses, the browser
-  carries on with the download as normal.
-- **Finds video and audio on the page.** It watches network traffic for HLS (`.m3u8`), DASH
-  (`.mpd`) and progressive video or audio files, and reads `<video>`/`<audio>` elements. Stream
-  segments (`.ts`, `.m4s`) and files under 512 KB are ignored. The toolbar badge shows how many
-  were found, and the popup lists them with a Download button.
-- **Shows a "Download this video" button** at the top right of a video when you hover over it.
-  For videos that play from a `blob:` URL it sends the best stream it saw on the page instead.
-- **Downloads YouTube videos (Edge build).** On YouTube (watch pages, Shorts, embeds, `youtu.be` links) the
-  button opens a quality menu (1080p, 720p, audio only, …) filled in by the desktop app, which
-  extracts the video with yt-dlp. The extension sends the page link, never YouTube's split
-  `googlevideo.com` streams, which are useless on their own.
-- **Adds "Download with Open Download Manager"** to the right-click menu for links, videos, audio and images.
-- **Settings:** turn catching on or off, catch everything or only listed file types, a minimum
-  size, and sites to leave alone.
+## What it does
+
+**The app** (WinUI 3, in the notification area)
+
+- Splits each download over up to 32 connections, and when one connection finishes it takes
+  over half of the slowest remaining range, so no connection sits idle at the end.
+- Saves progress every second in a SQLite file. Pause, close the app or restart Windows, and the
+  download continues where it stopped. If the file changed on the server it starts over rather
+  than mixing two versions (`If-Range`).
+- Retries dropped connections, backs off from servers that answer "too busy" and remembers how
+  many connections each server accepts.
+- Queue with a limit on parallel downloads, a start/stop time window, and sleep or shut down
+  when everything is done. Speed limits for all downloads and per download.
+- Sorts files into Video, Music, Documents, Programs, Archives and Other.
+- Video pages (YouTube, Vimeo, X, Reddit, TikTok and the other sites yt-dlp supports) come with a
+  quality menu: 2160p to 360p, audio only (M4A) or MP3. Video and audio are merged into one MP4.
+- "Refresh address" for links that expired: click the link again in the browser and the
+  download continues with the new address.
+- Marks finished files with Mark of the Web, like a browser does, so Windows and your antivirus
+  check downloaded programs before they run.
+- Notifications when a download finishes or fails, keeps the PC awake while downloading, starts
+  with Windows, and offers to download links you copy (this is how Chrome users get YouTube
+  videos, see below).
+
+**The extension** (Manifest V3, Chrome and Edge)
+
+- Catches browser downloads and sends them to the app with the page's cookies, referrer and user
+  agent, so downloads behind a login work. If the app is not installed or refuses, the browser
+  keeps the download. Hold Alt while clicking a link to leave that one to the browser.
+- Finds video and audio on pages (HLS, DASH, MP4 and others), shows a count on its icon, and a
+  "Download this video" button on videos.
+- On YouTube (Edge build) the button opens the quality menu next to the player.
+- Right-click: "Download with Open Download Manager" on links and media, and "Download all
+  links" on a page.
 
 ## Layout
 
 ```
-extension/          the unpacked extension (load this folder in the browser)
-  background.js     service worker: catching downloads, detecting media, context menu
-  content.js        finds media elements and draws the video button
-  lib/media.js      decides which responses are media (unit tested)
-  lib/rules.js      decides which downloads to catch (unit tested)
-  lib/native.js     native messaging client
-  lib/sites.js      recognises YouTube links (unit tested)
-  popup/, options/  toolbar popup and settings page
-native-host/
-  PROTOCOL.md       the messages the desktop app must answer
-  test_host.py      a stand-in host that accepts everything and logs to received.jsonl
-  install-windows.ps1  registers the host for Chrome and Edge (current user)
-tests/              unit tests and a Chromium end-to-end test
-core/               the shared Rust core (Cargo workspace)
-  crates/odm-core   protocol types, message framing, segment planning, job states
-  crates/odm-host   the native messaging host (answers on its own until the desktop app exists)
+core/                         the Rust core, shared with a later macOS app
+  crates/odm-core             engine, queue, SQLite state, yt-dlp, browser pipe, protocol
+  crates/odm-host             native messaging host: relays the extension to the app
+  crates/odm-ffi              odm.dll, the C interface the Windows app calls
+windows/OpenDownloadManager/  the WinUI 3 app (C#)
+extension/                    the browser extension (load this folder unpacked)
+native-host/PROTOCOL.md       the messages between the extension and the app
+scripts/fetch-tools.ps1       downloads yt-dlp and an LGPL ffmpeg into tools/, checking hashes
+scripts/build.mjs             builds the Edge and Chrome extension packages
+tests/                        extension unit tests and a Chromium end-to-end test
 ```
 
-## Try it on Windows
+## Build and run on Windows
 
-1. Open `chrome://extensions` (or `edge://extensions`), turn on Developer mode, choose
-   **Load unpacked** and pick the `extension` folder. The extension ID will be
-   `ohammiojomdnbnfhigkofgahnghdmolg`, fixed by the `key` in `manifest.json`.
-2. With Python installed, run
-   `powershell -ExecutionPolicy Bypass -File native-host\install-windows.ps1`.
-   This registers the test host. Once the real app exists, pass `-HostPath` with its host exe.
-3. Download any file. It should disappear from the browser's download list and show up in
-   `native-host\received.jsonl`.
+You need the Rust toolchain (1.88 or later, MSVC target), the Visual Studio C++ build tools,
+the .NET 9 SDK and Node.js.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\fetch-tools.ps1
+dotnet build windows\OpenDownloadManager -c Release
+windows\OpenDownloadManager\bin\Release\net9.0-windows10.0.26100.0\win-x64\OpenDownloadManager.exe
+```
+
+The app build runs `cargo build --release` for the core and the host first (skip it with
+`-p:SkipRustBuild=true`), and copies `odm.dll`, `odm-host.exe` and `tools\` next to the app.
+On every start the app registers the native messaging host for Chrome and Edge under
+`HKCU` (no admin rights needed).
+
+Then load the extension: open `edge://extensions` or `chrome://extensions`, turn on Developer
+mode, choose **Load unpacked** and pick the `extension` folder. Its ID is
+`ohammiojomdnbnfhigkofgahnghdmolg`, fixed by the `key` in `manifest.json`, which is the ID the app
+allows. The popup shows "App connected" when everything is in place.
 
 ## Tests
 
-```
-npm install         # once, for the end-to-end test
-npm test            # unit tests, no browser needed
-npm run build       # dist/edge and dist/chrome, plus a zip of each
-npm run test:e2e    # builds, then loads the extension in Playwright's Chromium with the test host
-```
-
-The Rust core (needs Rust 1.85 or later; on Windows, the MSVC build tools):
-
-```
-cd core
-cargo test --workspace
-cargo build --release -p odm-host   # target/release/odm-host.exe
+```powershell
+cd core; cargo test --workspace     # engine against a misbehaving local server, manager, pipe, host
+npm test                            # extension unit tests
+npm install; npm run test:e2e       # loads the extension in Playwright's Chromium with a test host
 ```
 
-## Two builds: Edge and Chrome
+## Two extension builds: Edge and Chrome
 
 The Chrome Web Store does not accept extensions that download YouTube videos, so there are two
 builds made from the same code:
@@ -80,18 +94,19 @@ builds made from the same code:
 | Build | YouTube | Where it goes |
 |---|---|---|
 | Edge | Download button and quality menu on YouTube | Microsoft Edge Add-ons |
-| Chrome | Off. The page script doesn't run on YouTube, and the popup tells people to paste the link into the desktop app | Chrome Web Store |
+| Chrome | Off on YouTube. Copy the video's link instead: the app offers the quality menu | Chrome Web Store |
 
-`npm run build` writes `dist/edge/`, `dist/chrome/` and a store-ready zip for each. The only
-differences are `lib/build-flags.js` and the Chrome manifest's `exclude_matches` for YouTube.
-Loading the `extension/` folder unpacked gives you the Edge behaviour.
+`npm run build` writes `dist/edge/`, `dist/chrome/` and a store-ready zip for each. Loading the
+`extension/` folder unpacked gives you the Edge behaviour.
 
 ## Contributing
 
-Issues and pull requests are welcome. Run `npm test` before sending a change, and
-`npm run test:e2e` if you touched `background.js`, `content.js`, the build or the protocol.
-Changes to the messages in `native-host/PROTOCOL.md` need a matching change in the desktop app.
+Issues and pull requests are welcome. Run `cargo test` in `core` and `npm test` before sending a
+change. Changes to the messages in `native-host/PROTOCOL.md` need matching changes in
+`odm-core/src/protocol.rs` and the extension. Tests use a local test server and files we
+generate; please do not add links to copyrighted videos.
 
 ## License
 
-GNU General Public License v3.0. See [LICENSE](LICENSE).
+GNU General Public License v3.0. See [LICENSE](LICENSE). yt-dlp is public domain (Unlicense);
+the bundled ffmpeg is an LGPL build and runs as a separate program.

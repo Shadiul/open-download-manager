@@ -17,3 +17,6 @@ obj/
 Thumbs.db
 .vscode/
 .idea/
+
+# Bundled tools fetched by scripts/fetch-tools.ps1
+tools/

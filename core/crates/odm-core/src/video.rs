@@ -104,6 +104,12 @@ fn size_of(f: &Value) -> Option<u64> {
     f["filesize"].as_u64().or_else(|| f["filesize_approx"].as_f64().map(|v| v as u64))
 }
 
+/// Plain HTTP(S) formats download as one file. HLS fragments (YouTube's ids in the 600s, among
+/// others) are slower and often refused partway through, so they rank lower.
+fn direct(f: &Value) -> bool {
+    f["protocol"].as_str().is_none_or(|p| p == "https" || p == "http")
+}
+
 fn has(f: &Value, codec: &str) -> bool {
     f[codec].as_str().is_some_and(|c| c != "none")
 }
@@ -115,7 +121,7 @@ pub fn build_menu(info: &Value) -> Vec<Format> {
     let tbr = |f: &Value| f["tbr"].as_f64().unwrap_or(0.0);
 
     let best_audio = formats.iter().filter(|f| has(f, "acodec") && !has(f, "vcodec")).max_by(|a, b| {
-        let key = |f: &Value| (f["ext"] == "m4a", f["abr"].as_f64().unwrap_or_else(|| tbr(f)));
+        let key = |f: &Value| (direct(f), f["ext"] == "m4a", f["abr"].as_f64().unwrap_or_else(|| tbr(f)));
         key(a).partial_cmp(&key(b)).unwrap_or(std::cmp::Ordering::Equal)
     });
 
@@ -123,7 +129,7 @@ pub fn build_menu(info: &Value) -> Vec<Format> {
     for f in formats.iter().filter(|f| has(f, "vcodec") && f["height"].as_u64().is_some_and(|h| h > 0)) {
         let h = f["height"].as_u64().unwrap_or(0);
         let better = |old: &Value| {
-            let key = |f: &Value| (f["ext"] == "mp4", f["fps"].as_f64().unwrap_or(0.0), tbr(f));
+            let key = |f: &Value| (direct(f), f["fps"].as_f64().unwrap_or(0.0), f["ext"] == "mp4", tbr(f));
             key(f).partial_cmp(&key(old)) == Some(std::cmp::Ordering::Greater)
         };
         match by_height.iter_mut().find(|(height, _)| *height == h) {
@@ -366,6 +372,19 @@ mod tests {
         assert_eq!(menu[0].size, Some(104));
         assert_eq!(menu[1].size, Some(20), "muxed format keeps its own size");
         assert_eq!(menu[2].label, "Audio only (M4A)");
+    }
+
+    #[test]
+    fn direct_formats_beat_hls_at_the_same_height() {
+        let info = json!({ "formats": [
+            { "format_id": "230", "ext": "mp4", "protocol": "m3u8_native", "vcodec": "avc1", "acodec": "none", "height": 360, "fps": 30, "tbr": 900.0 },
+            { "format_id": "134", "ext": "mp4", "protocol": "https", "vcodec": "avc1", "acodec": "none", "height": 360, "fps": 30, "tbr": 300.0 },
+            { "format_id": "140", "ext": "m4a", "protocol": "https", "vcodec": "none", "acodec": "mp4a", "abr": 128.0 },
+            { "format_id": "233", "ext": "mp4", "protocol": "m3u8_native", "vcodec": "none", "acodec": "mp4a", "abr": 192.0 }
+        ]});
+        let ids: Vec<String> = build_menu(&info).into_iter().map(|f| f.id).collect();
+        assert_eq!(ids[0], "134+140");
+        assert_eq!(ids[1], "140");
     }
 
     #[test]

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyMedia, totalFromContentRange, mediaKey, extensionOf } from '../extension/lib/media.js';
 import { shouldCatch, DEFAULT_SETTINGS } from '../extension/lib/rules.js';
+import { pickFileLinks } from '../extension/lib/links.js';
 
 const MB = 1024 * 1024;
 
@@ -86,6 +87,22 @@ test('pageDownloadUrl ignores non-video YouTube pages and other sites', () => {
 test('isSplitStream flags googlevideo pieces', () => {
   assert.equal(isSplitStream('https://rr3---sn-abc.googlevideo.com/videoplayback?itag=137'), true);
   assert.equal(isSplitStream('https://example.com/v.mp4'), false);
+});
+
+test('pickFileLinks keeps file links once, in page order', () => {
+  const links = [
+    { url: 'https://e.com/a.zip', text: ' A ' },
+    { url: 'https://e.com/about.html', text: 'About' },
+    { url: 'https://e.com/a.zip#top', text: 'again' },
+    { url: 'javascript:void(0)', text: 'x' },
+    { url: 'mailto:me@example.com', text: 'mail' },
+    { url: 'https://e.com/My%20Doc.PDF?dl=1', text: 'doc' },
+    { url: 'not a url' }
+  ];
+  assert.deepEqual(pickFileLinks(links, DEFAULT_SETTINGS.extensions), [
+    { url: 'https://e.com/a.zip', text: 'A' },
+    { url: 'https://e.com/My%20Doc.PDF?dl=1', text: 'doc' }
+  ]);
 });
 
 import fs from 'node:fs';

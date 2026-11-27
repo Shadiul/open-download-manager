@@ -29,7 +29,7 @@ async function init() {
 
   send({ type: 'ping-host' }).then((r) => {
     const el = $('host');
-    el.textContent = r.ok ? 'App connected' : 'App not found';
+    el.textContent = !r.ok ? 'App not found' : r.running ? 'App connected' : 'App ready (starts with the first download)';
     el.className = `status ${r.ok ? 'ok' : 'bad'}`;
     if (!r.ok) el.title = r.error || '';
   });

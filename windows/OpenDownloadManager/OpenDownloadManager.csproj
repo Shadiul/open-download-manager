@@ -1,0 +1,60 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>OpenDownloadManager</RootNamespace>
+    <AssemblyName>OpenDownloadManager</AssemblyName>
+    <Version>0.1.0</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <!-- Unpackaged: an MSIX package would virtualize the registry keys Chrome and Edge read. -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>preview</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Program.cs has its own Main, for single-instance redirection. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <EnableMsixTooling>true</EnableMsixTooling>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.7.0" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="H.NotifyIcon.WinUI" Version="2.3.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\app.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The Rust core (odm.dll), the native messaging host, and the bundled tools. -->
+  <PropertyGroup>
+    <CoreDir>$(MSBuildThisFileDirectory)..\..\core\</CoreDir>
+    <RustOut>$(CoreDir)target\release\</RustOut>
+    <ToolsDir>$(MSBuildThisFileDirectory)..\..\tools\</ToolsDir>
+    <CargoExe Condition="Exists('$(USERPROFILE)\.cargo\bin\cargo.exe')">$(USERPROFILE)\.cargo\bin\cargo.exe</CargoExe>
+    <CargoExe Condition="'$(CargoExe)' == ''">cargo</CargoExe>
+  </PropertyGroup>
+
+  <Target Name="BuildRustCore" BeforeTargets="BeforeBuild" Condition="'$(SkipRustBuild)' != 'true'">
+    <Exec Command="&quot;$(CargoExe)&quot; build --release -p odm-ffi -p odm-host" WorkingDirectory="$(CoreDir)" />
+  </Target>
+
+  <ItemGroup>
+    <None Include="$(RustOut)odm.dll" Link="odm.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(RustOut)odm-host.exe" Link="odm-host.exe" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <ItemGroup Condition="Exists('$(ToolsDir)yt-dlp.exe')">
+    <None Include="$(ToolsDir)*.exe;$(ToolsDir)*.txt" Link="tools\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+</Project>

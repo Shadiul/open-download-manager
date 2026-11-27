@@ -26,8 +26,9 @@ export function sendToHost(message, timeoutMs = 8000) {
 export async function pingHost() {
   try {
     const reply = await sendToHost({ type: 'ping' }, 4000);
-    return { ok: !!reply.ok, version: reply.version || null, error: reply.error || null };
+    // `running: false` means the host answered for an app that is installed but not started yet.
+    return { ok: !!reply.ok, running: reply.running !== false, version: reply.version || null, error: reply.error || null };
   } catch (e) {
-    return { ok: false, version: null, error: e.message };
+    return { ok: false, running: false, version: null, error: e.message };
   }
 }
