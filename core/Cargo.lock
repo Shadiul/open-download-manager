@@ -774,7 +774,7 @@ dependencies = [
 
 [[package]]
 name = "odm-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -792,7 +792,7 @@ dependencies = [
 
 [[package]]
 name = "odm-ffi"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "odm-core",
  "serde_json",
@@ -800,7 +800,7 @@ dependencies = [
 
 [[package]]
 name = "odm-host"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "odm-core",
  "serde_json",
