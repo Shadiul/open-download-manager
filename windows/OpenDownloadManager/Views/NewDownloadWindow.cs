@@ -69,9 +69,12 @@ public sealed class NewDownloadWindow : Window
                 new TextBlock { Text = $"Size: {size}", Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] },
                 new TextBlock
                 {
-                    Text = item.Url,
+                    // One line with the site; the full address (often a long signed link) is on hover.
+                    Text = Uri.TryCreate(item.Url, UriKind.Absolute, out var source) ? $"From {source.Host}" : item.Url,
                     MaxWidth = 470,
                     TextTrimming = TextTrimming.CharacterEllipsis,
+                    TextWrapping = TextWrapping.NoWrap,
+                    MaxLines = 1,
                     Opacity = 0.7,
                     Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
                 },
