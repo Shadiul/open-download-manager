@@ -77,8 +77,11 @@
   <Target Name="BuildExtension" BeforeTargets="AssignTargetPaths" Condition="'$(SkipExtensionBuild)' != 'true'">
     <Exec Command="node scripts/build.mjs" WorkingDirectory="$(RepoDir)" />
     <ItemGroup>
-      <None Include="$(RepoDir)dist\edge\**\*" Link="extension\edge\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
-      <None Include="$(RepoDir)dist\chrome\**\*" Link="extension\chrome\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
+      <_ExtensionFile Include="$(RepoDir)dist\edge\**\*" Build="edge" />
+      <_ExtensionFile Include="$(RepoDir)dist\chrome\**\*" Build="chrome" />
+      <!-- An explicit TargetPath: build and publish both put each file under extension\<build>\. -->
+      <ContentWithTargetPath Include="@(_ExtensionFile)" TargetPath="extension\%(_ExtensionFile.Build)\%(_ExtensionFile.RecursiveDir)%(_ExtensionFile.Filename)%(_ExtensionFile.Extension)"
+                             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
   </Target>
 
