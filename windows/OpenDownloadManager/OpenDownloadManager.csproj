@@ -5,7 +5,7 @@
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>OpenDownloadManager</RootNamespace>
     <AssemblyName>OpenDownloadManager</AssemblyName>
-    <Version>0.3.1</Version>
+    <Version>0.4.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
@@ -36,6 +36,15 @@
   <ItemGroup>
     <Content Include="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\app.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\tray-light.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\tray-dark.ico" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The second colour icon, chosen in Settings (AppPaths.AppIcon). -->
+    <Content Include="Assets\app-smoke.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\app-smoke.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\tray-smoke-light.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\tray-smoke-dark.ico" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The welcome steps' illustrations (scripts\welcome\cutout-welcome.py); not their source sheets. -->
+    <Content Include="Assets\welcome\*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Windows App SDK's AI and machine-learning parts (onnxruntime, DirectML and their projections),
@@ -69,6 +78,22 @@
   <ItemGroup Condition="Exists('$(ToolsDir)ffmpeg.exe')">
     <None Include="$(ToolsDir)*.exe;$(ToolsDir)*.dll;$(ToolsDir)*.txt" Link="tools\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
+  <!-- The browser extension, both builds, ships inside the app (extension\edge, extension\chrome);
+       the app copies it to its data folder and guides adding it to each browser. -->
+  <PropertyGroup>
+    <RepoDir>$(MSBuildThisFileDirectory)..\..\</RepoDir>
+  </PropertyGroup>
+  <Target Name="BuildExtension" BeforeTargets="AssignTargetPaths" Condition="'$(SkipExtensionBuild)' != 'true'">
+    <Exec Command="node scripts/build.mjs" WorkingDirectory="$(RepoDir)" />
+    <ItemGroup>
+      <_ExtensionFile Include="$(RepoDir)dist\edge\**\*" Build="edge" />
+      <_ExtensionFile Include="$(RepoDir)dist\chrome\**\*" Build="chrome" />
+      <!-- An explicit TargetPath: build and publish both put each file under extension\<build>\. -->
+      <ContentWithTargetPath Include="@(_ExtensionFile)" TargetPath="extension\%(_ExtensionFile.Build)\%(_ExtensionFile.RecursiveDir)%(_ExtensionFile.Filename)%(_ExtensionFile.Extension)"
+                             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup Condition="Exists('$(ToolsDir)yt-dlp\yt-dlp.exe')">
     <None Include="$(ToolsDir)yt-dlp\**\*" Link="tools\yt-dlp\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>

@@ -100,7 +100,13 @@ pub enum WhenDone {
     #[default]
     Nothing,
     Sleep,
+    Hibernate,
     Shutdown,
+    Restart,
+    SignOut,
+    Lock,
+    /// Close Open Download Manager.
+    Quit,
 }
 
 #[cfg(test)]
@@ -134,5 +140,23 @@ mod tests {
         assert_eq!(s.max_parallel, 3);
         let s: Settings = serde_json::from_str(r#"{ "downloadDir": "s tC:/Users/me/Downloads" }"#).unwrap();
         assert_eq!(s.normalized().download_dir, "", "a path that is not absolute is dropped");
+    }
+
+    #[test]
+    fn when_done_names() {
+        for (name, value) in [
+            ("nothing", WhenDone::Nothing),
+            ("sleep", WhenDone::Sleep),
+            ("hibernate", WhenDone::Hibernate),
+            ("shutdown", WhenDone::Shutdown),
+            ("restart", WhenDone::Restart),
+            ("signOut", WhenDone::SignOut),
+            ("lock", WhenDone::Lock),
+            ("quit", WhenDone::Quit),
+        ] {
+            let s: Settings = serde_json::from_str(&format!(r#"{{ "whenDone": "{name}" }}"#)).unwrap();
+            assert_eq!(s.when_done, value);
+            assert_eq!(serde_json::to_value(value).unwrap(), name);
+        }
     }
 }

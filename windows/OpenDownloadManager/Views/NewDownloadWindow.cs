@@ -38,7 +38,7 @@ public sealed class NewDownloadWindow : Window
         _core = core;
         _item = item;
         Title = "New download";
-        SystemBackdrop = new MicaBackdrop();
+        SystemBackdrop = Appearance.Backdrop();
 
         var video = item.Kind == "video";
         _originalName = video ? item.Title ?? item.FileName : item.FileName;
@@ -121,6 +121,7 @@ public sealed class NewDownloadWindow : Window
         }
         CenterOnScreen();
         ViewSettings.Current.Track(this);
+        Appearance.Track(this);
         _originalNameShown = _originalName;
         ShowLive();
         _item.PropertyChanged += OnItemChanged;

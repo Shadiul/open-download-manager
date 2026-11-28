@@ -1,4 +1,5 @@
-﻿using H.NotifyIcon;
+﻿using System.Runtime.InteropServices;
+using H.NotifyIcon;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -43,6 +44,8 @@ public partial class App : Application
     {
         _ui = DispatcherQueue.GetForCurrentThread();
         ViewSettings.Current.Load(Settings);
+        Appearance.ApplyAccent();
+        ThemeColors.Watch();
         Notifications.Invoked += a => _ui.TryEnqueue(() => OnNotification(a));
         var profile = AppPaths.Profile;
         if (profile is null) Notifications.Register();
@@ -105,7 +108,28 @@ public partial class App : Application
         else if (!Environment.GetCommandLineArgs().Contains("--background"))
         {
             ShowWindow();
+            // The first start offers the extension to each browser (and a few choices). The installer's
+            // "Set up the browser extension" starts the app with --setup-extension to get to that step.
+            var setupExtension = Environment.GetCommandLineArgs().Contains("--setup-extension");
+            if (!Settings.WelcomeDone || setupExtension) ShowWelcome(browsers: setupExtension);
         }
+        // The extension in the data folder follows the copy shipped with this version of the app.
+        _ = Task.Run(() => { try { BundledExtension.Sync(); } catch (Exception e) { Log.Error("extension sync", e); } });
+    }
+
+    private Views.WelcomeWindow? _welcome;
+
+    /// <param name="browsers">Open on the browsers page, unless the welcome has never been done.</param>
+    public void ShowWelcome(bool browsers = false)
+    {
+        if (_core is null) return;
+        if (_welcome is null)
+        {
+            _welcome = new Views.WelcomeWindow(_core, Settings);
+            _welcome.Closed += (_, _) => _welcome = null;
+        }
+        if (browsers && Settings.WelcomeDone) _welcome.ShowBrowsers();
+        _welcome.ShowOnTop();
     }
 
     /// <summary>A second launch handed over to this instance.</summary>
@@ -124,6 +148,7 @@ public partial class App : Application
                 : "";
             if (launchArgs.Contains("--quit")) { Quit(); return; }
             if (!launchArgs.Contains("--background")) ShowWindow();
+            if (launchArgs.Contains("--setup-extension")) ShowWelcome(browsers: true);
         });
     }
 
@@ -141,6 +166,7 @@ public partial class App : Application
         _exiting = true;
         _tray?.Dispose();
         _tray = null;
+        _flyout?.Close();
         if (AppPaths.Profile is null) Notifications.Unregister();
         Power.KeepAwake(false);
         SpeedHistory.Save();
@@ -163,7 +189,7 @@ public partial class App : Application
         window.ShowOnTop();
     }
 
-    private void ShowNewDownload(Models.DownloadItem item)
+    public void ShowNewDownload(Models.DownloadItem item)
     {
         if (_core is null) return;
         try
@@ -179,35 +205,138 @@ public partial class App : Application
         }
     }
 
+    private Views.TrayFlyout? _flyout;
+
+    /// <summary>
+    /// The tray icon. A click opens the flyout above it (downloads, speed, quick actions); a
+    /// double-click opens the main window; a right-click, or the menu key, opens a short native menu.
+    /// </summary>
     private void CreateTray()
     {
-        var menu = new MenuFlyout();
-        menu.Items.Add(Item("Open Open Download Manager", ShowWindow));
-        menu.Items.Add(Item("Add download…", () => { ShowWindow(); _window?.OpenAddDialog(null); }));
-        menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Item("Pause all", () => _ = _core?.CallAsync(new { type = "pauseAll" })));
-        menu.Items.Add(Item("Resume all", () => _ = _core?.CallAsync(new { type = "resumeAll" })));
-        menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Item("Exit", Quit));
-
+        if (_vm is null || _core is null) return;
+        _flyout = new Views.TrayFlyout(_vm, _core);
         _tray = new TaskbarIcon
         {
             ToolTipText = AppPaths.AppName,
-            IconSource = new BitmapImage(new Uri(AppPaths.IconPath)),
-            ContextMenuMode = ContextMenuMode.SecondWindow,
-            ContextFlyout = menu,
+            IconSource = TrayIcon(),
             NoLeftClickDelay = true,
-            LeftClickCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(ShowWindow),
+            LeftClickCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(() => ToggleFlyout(byKeyboard: false)),
+            DoubleClickCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(() => { _flyout?.Close(); ShowWindow(); }),
+            RightClickCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(() =>
+            {
+                GetCursorPos(out var p);
+                ShowTrayMenu(p.X, p.Y);
+            }),
         };
         _tray.ForceCreate();
-
-        static MenuFlyoutItem Item(string text, Action action)
+        // Keyboard: Enter or Space on the icon (Win+B, then arrows) opens the flyout; the menu key, the menu.
+        _tray.TrayIcon.MessageWindow.KeyboardEventReceived += (_, e) => _ui?.TryEnqueue(() =>
         {
-            var item = new MenuFlyoutItem { Text = text };
-            item.Command = new CommunityToolkit.Mvvm.Input.RelayCommand(action);
-            return item;
-        }
+            switch (e.KeyboardEvent)
+            {
+                case H.NotifyIcon.Core.KeyboardEvent.Select or H.NotifyIcon.Core.KeyboardEvent.KeySelect:
+                    ToggleFlyout(byKeyboard: true);
+                    break;
+                case H.NotifyIcon.Core.KeyboardEvent.ContextMenu:
+                    var r = TrayIconRect();
+                    ShowTrayMenu(r.X + r.Width / 2, r.Y);
+                    break;
+            }
+        });
+        // The glyph is one colour, so it follows the taskbar when Windows switches between light and dark.
+        ThemeColors.SystemColorsChanged += () => { if (_tray is not null) _tray.IconSource = TrayIcon(); };
     }
+
+    private long _lastToggle;
+
+    private void ToggleFlyout(bool byKeyboard)
+    {
+        // The keyboard can arrive twice (select and key-select) for one press.
+        if (_flyout is null || Environment.TickCount64 - _lastToggle < 150) return;
+        _lastToggle = Environment.TickCount64;
+        _flyout.Toggle(TrayIconRect(), byKeyboard);
+    }
+
+    /// <summary>Where the icon is on screen, in physical pixels; the cursor when Windows cannot say (in the overflow).</summary>
+    private Windows.Graphics.RectInt32 TrayIconRect()
+    {
+        if (_tray?.TrayIcon is { } icon)
+        {
+            var id = new NOTIFYICONIDENTIFIER
+            {
+                cbSize = (uint)Marshal.SizeOf<NOTIFYICONIDENTIFIER>(),
+                hWnd = icon.WindowHandle,
+                guidItem = icon.Id,
+            };
+            if (Shell_NotifyIconGetRect(ref id, out var r) == 0 && r.Right > r.Left)
+                return new(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+        }
+        GetCursorPos(out var p);
+        return new(p.X, p.Y, 1, 1);
+    }
+
+    private void ShowTrayMenu(int x, int y)
+    {
+        if (_core is null || _flyout is null) return;
+        _flyout.Close();
+        var core = _core;
+        var all = _vm?.All.ToList() ?? [];
+        var current = AfterDownload.QueueAction(core);
+        Services.TrayMenu.Show(_flyout.Hwnd, x, y,
+        [
+            new Services.TrayMenu.Command("Open Open Download Manager", ShowWindow, IsDefault: true),
+            new Services.TrayMenu.Command("Add download…", () => ShowAddDialog(null)),
+            new Services.TrayMenu.Separator(),
+            new Services.TrayMenu.Command("Pause all", () => _ = core.CallAsync(new { type = "pauseAll" }), Enabled: all.Any(i => i.CanPause)),
+            new Services.TrayMenu.Command("Resume all", () => _ = core.CallAsync(new { type = "resumeAll" }), Enabled: all.Any(i => i.State == "paused" && !i.AwaitingConfirmation)),
+            new Services.TrayMenu.Submenu("When downloads finish",
+                AfterDownload.QueueActions.SelectMany<(string Value, string Label, string Short, string Glyph, string Countdown), Services.TrayMenu.Entry>(a =>
+                    a.Value == "nothing"
+                        ? [new Services.TrayMenu.Radio(a.Label, a.Value == current, () => _ = AfterDownload.SetQueueAction(core, a.Value)), new Services.TrayMenu.Separator()]
+                        : [new Services.TrayMenu.Radio(a.Label, a.Value == current, () => _ = AfterDownload.SetQueueAction(core, a.Value))]).ToList()),
+            new Services.TrayMenu.Separator(),
+            new Services.TrayMenu.Command("Settings", ShowSettings),
+            new Services.TrayMenu.Command("Exit", Quit),
+        ], ThemeColors.IsDark);
+    }
+
+    public void ShowAddDialog(string? url)
+    {
+        ShowWindow();
+        _window?.OpenAddDialog(url);
+    }
+
+    public void ShowSettings()
+    {
+        ShowWindow();
+        _window?.ShowSettings();
+    }
+
+    public void ShowFinished()
+    {
+        ShowWindow();
+        _window?.ShowFinished();
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NOTIFYICONIDENTIFIER
+    {
+        public uint cbSize;
+        public IntPtr hWnd;
+        public uint uID;
+        public Guid guidItem;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT { public int X, Y; }
+
+    [DllImport("shell32.dll")] private static extern int Shell_NotifyIconGetRect(ref NOTIFYICONIDENTIFIER id, out RECT rect);
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
+
+    private static BitmapImage TrayIcon() => new(new Uri(AppPaths.TrayIconPath(ThemeColors.TaskbarIsLight)));
 
     public void UpdateTrayTooltip(string text)
     {
@@ -223,17 +352,26 @@ public partial class App : Application
             _ = Task.Run(() => MarkOfTheWeb.Apply(path, url, page));
         }
         if (Settings.Notifications) Notifications.Completed(item.Id, item.DisplayName, item.SaveDir);
+        AfterDownload.OnFileFinished(item, Settings);
     }
 
     private async void OnQueueFinished(string whenDone)
     {
-        if (_window is null || whenDone is not ("sleep" or "shutdown")) return;
+        var action = AfterDownload.QueueActions.FirstOrDefault(a => a.Value == whenDone);
+        if (_window is null || _core is null || action.Value is null or "nothing") return;
         ShowWindow();
-        if (await _window.ConfirmCountdown(whenDone == "sleep" ? "go to sleep" : "shut down", 30))
+        var go = await _window.ConfirmCountdown(action.Countdown, Math.Max(5, Settings.QueueActionDelay));
+        // Armed once: it goes back to "Do nothing" whether it ran or was cancelled.
+        if (Settings.QueueActionOnce) await AfterDownload.SetQueueAction(_core, "nothing");
+        if (!go) return;
+        if (whenDone is "shutdown" or "restart" or "signOut")
         {
-            if (whenDone == "sleep") Power.Sleep();
-            else { _core?.Dispose(); _core = null; Power.Shutdown(); }
+            // Save everything before Windows closes the app.
+            SpeedHistory.Save();
+            _core?.Dispose();
+            _core = null;
         }
+        AfterDownload.Perform(whenDone, Quit);
     }
 
     private void OnNotification(IDictionary<string, string> args)

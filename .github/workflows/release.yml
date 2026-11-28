@@ -78,11 +78,13 @@ jobs:
           **Windows 10 (2004) or later, 64-bit.**
 
           1. Download **OpenDownloadManager-$env:VERSION-setup-x64.exe** and run it. It installs for your user only, with no administrator rights. Prefer no installer? Unzip **OpenDownloadManager-$env:VERSION-portable-x64.zip** anywhere and run ``OpenDownloadManager.exe``.
-          2. Add the browser extension: download **OpenDownloadManager-$env:VERSION-extension-edge.zip** (Microsoft Edge, includes YouTube) or **...-extension-chrome.zip** (Google Chrome), unzip it, open ``edge://extensions`` or ``chrome://extensions``, turn on **Developer mode**, choose **Load unpacked** and pick the unzipped folder.
-          3. Open the app once. The extension's popup then shows **Connected**.
+          2. Start the app. Its welcome screen lists your browsers (Edge, Chrome, Brave, Vivaldi, Opera) with an **Add** button for each: it opens the browser's extensions page with the extension's folder beside it; turn on **Developer mode** and drag the folder onto the page. The installer's **Set up the browser extension** box opens it for you, and it is also in **Settings → Browsers**. The extension zips below are the same extension, to load by hand with **Load unpacked**.
 
           Windows SmartScreen may warn about the installer because it is not code-signed yet: choose **More info**, then **Run anyway**. ``SHA256SUMS.txt`` lists each file's checksum.
 
           "@
+          # What's new in this version, when docs/release-notes/<version>.md has it.
+          $whatsNew = "docs/release-notes/$env:VERSION.md"
+          if (Test-Path $whatsNew) { $notes = (Get-Content $whatsNew -Raw -Encoding utf8) + "`n" + $notes }
           Set-Content release-notes.md $notes -Encoding utf8
           gh release create "v$env:VERSION" dist/release/* --target $env:GITHUB_SHA --title "Open Download Manager $env:VERSION" --notes-file release-notes.md --generate-notes

@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:OpenDownloadManager.Models"
     xmlns:services="using:OpenDownloadManager.Services"
+    xmlns:views="using:OpenDownloadManager.Views"
     Title="Open Download Manager">
 
     <Window.SystemBackdrop>
@@ -53,7 +54,7 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <Image Source="ms-appx:///Assets/app.png" Width="16" Height="16" />
+                <Image x:Name="AppLogo" Source="ms-appx:///Assets/app.png" Width="16" Height="16" />
                 <TextBlock x:Name="AppTitle" Text="Open Download Manager" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
             </StackPanel>
             <AutoSuggestBox x:Name="Search" Grid.Column="1" PlaceholderText="Search downloads (Ctrl+F)" Width="360" QueryIcon="Find"
@@ -406,15 +407,10 @@
                                 </Grid>
                                 <TextBlock Grid.Column="1" Width="130" Style="{StaticResource Cell}" Text="{x:Bind SizeText, Mode=OneWay}"
                                            Visibility="{x:Bind services:ViewSettings.Current.SizeColumn, Mode=OneWay}" />
-                                <!-- Progress as text, centred in its column; the row itself shows it as a fill. -->
-                                <Grid Grid.Column="2" Width="170" VerticalAlignment="Center"
-                                      Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
-                                        <FontIcon Glyph="{x:Bind StateGlyph, Mode=OneWay}" FontSize="12" Foreground="{x:Bind StatusBrush, Mode=OneWay}"
-                                                  Visibility="{x:Bind StateVisible, Mode=OneWay}" />
-                                        <TextBlock Style="{StaticResource Cell}" Text="{x:Bind ProgressText, Mode=OneWay}" Foreground="{x:Bind StatusBrush, Mode=OneWay}" />
-                                    </StackPanel>
-                                </Grid>
+                                <!-- The Progress column: words for most styles (the row itself is the fill), or a
+                                     ring or a bar with the percentage for those two styles. Views/ProgressCell.cs. -->
+                                <views:ProgressCell Grid.Column="2" Width="170"
+                                      Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}" />
                                 <TextBlock Grid.Column="3" Width="90" Style="{StaticResource Cell}" Text="{x:Bind SpeedText, Mode=OneWay}"
                                            Visibility="{x:Bind services:ViewSettings.Current.SpeedColumn, Mode=OneWay}" />
                                 <TextBlock Grid.Column="4" Width="80" Style="{StaticResource Cell}" Text="{x:Bind TimeLeftText, Mode=OneWay}"
@@ -439,7 +435,20 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <!-- What the computer does once every download is done: a quick switch, also in Settings and the tray. -->
+                    <DropDownButton x:Name="WhenDoneButton" Grid.Column="2" Padding="8,2,6,2" MinHeight="0" FontSize="12"
+                                    Background="Transparent" BorderThickness="0" AutomationProperties.Name="When all downloads finish"
+                                    ToolTipService.ToolTip="What happens when all downloads finish">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon x:Name="WhenDoneIcon" Glyph="&#xE7E8;" FontSize="12" />
+                            <TextBlock x:Name="WhenDoneText" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+                        <DropDownButton.Flyout>
+                            <MenuFlyout x:Name="WhenDoneMenu" Placement="TopEdgeAlignedRight" Opening="OnWhenDoneMenuOpening" />
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
                     <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}"
                                TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock x:Name="SelectionText" Grid.Column="1" Style="{StaticResource CaptionTextBlockStyle}"

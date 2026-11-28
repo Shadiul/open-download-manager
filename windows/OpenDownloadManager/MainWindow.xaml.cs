@@ -21,6 +21,9 @@ public sealed partial class MainWindow : Window
         ViewModel = viewModel;
         InitializeComponent();
         ShowDensity();
+        ShowQueueAction(AfterDownload.QueueAction(ViewModel.Core));
+        AfterDownload.QueueActionChanged += value => DispatcherQueue.TryEnqueue(() => ShowQueueAction(value));
+        ThemeColors.Changed += () => ShowQueueAction(AfterDownload.QueueAction(ViewModel.Core));
         var find = new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = Windows.System.VirtualKey.F, Modifiers = Windows.System.VirtualKeyModifiers.Control };
         find.Invoked += (_, a) => { Search.Focus(FocusState.Keyboard); a.Handled = true; };
         if (Content is UIElement root) root.KeyboardAccelerators.Add(find);
@@ -37,6 +40,12 @@ public sealed partial class MainWindow : Window
         // The caption buttons at their standard height, matching the 32 px title row.
         AppWindow.TitleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Standard;
         AppWindow.SetIcon(AppPaths.IconPath);
+        if (AppPaths.IsDev) Title = AppTitle.Text = AppPaths.AppName;
+        // The title bar shows the icon chosen in Settings (the window's own icon follows in ViewSettings).
+        ShowLogo();
+        AppLogo.Loaded += (_, _) => { ShowLogo(); AppLogo.XamlRoot.Changed += (_, _) => ShowLogo(); };
+        ViewSettings.Current.PropertyChanged += OnAppIconChanged;
+        Closed += (_, _) => ViewSettings.Current.PropertyChanged -= OnAppIconChanged;
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 700));
         if (AppWindow.Presenter is OverlappedPresenter p)
         {
@@ -53,7 +62,16 @@ public sealed partial class MainWindow : Window
             if (e.PropertyName == nameof(MainViewModel.CheckedCount)) ShowChecked();
         };
         ViewSettings.Current.Track(this);
+        Appearance.Track(this);
         ShowSortArrows();
+    }
+
+    // The chosen icon, full colour without its tile, sharp at the window's scale (as in the tool windows).
+    private void ShowLogo() => IconFrames.Show(AppLogo, 16);
+
+    private void OnAppIconChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ViewSettings.AppIcon)) ShowLogo();
     }
 
     // ----- search, filters, view options -----
@@ -286,15 +304,40 @@ public sealed partial class MainWindow : Window
         if (args.SelectedItem is NavigationViewItem { Tag: string tag }) ViewModel.Filter = tag;
     }
 
+    /// <summary>Shows the Settings page (from the tray).</summary>
+    public void ShowSettings() => Nav.SelectedItem = Nav.SettingsItem;
+
+    /// <summary>Shows the finished downloads (from the tray's "See all").</summary>
+    public void ShowFinished() =>
+        Nav.SelectedItem = Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => i.Tag as string == "completed") ?? Nav.SelectedItem;
+
     public async void OpenAddDialog(string? url, bool probe = false)
     {
-        var dialog = new AddDownloadDialog(ViewModel.Core, Hwnd, url, probe) { XamlRoot = Content.XamlRoot };
+        var dialog = new AddDownloadDialog(ViewModel.Core, Hwnd, url, probe) { XamlRoot = Content.XamlRoot, RequestedTheme = ((FrameworkElement)Content).ActualTheme };
         await dialog.ShowAsync();
         if (dialog.Error is { } error) ShowError(error);
     }
 
     /// <summary>Counts down before sleep or shutdown; returns false if the user cancels.</summary>
-    public async Task<bool> ConfirmCountdown(string action, int seconds)
+    // ----- when all downloads finish -----
+
+    private void ShowQueueAction(string value)
+    {
+        var action = AfterDownload.QueueActions.FirstOrDefault(a => a.Value == value);
+        WhenDoneText.Text = $"When done: {action.Short ?? "nothing"}";
+        WhenDoneIcon.Glyph = action.Glyph ?? "";
+        // Armed: in the accent colour, so a pending shutdown is hard to miss.
+        if (value == "nothing") WhenDoneText.ClearValue(TextBlock.ForegroundProperty);
+        else WhenDoneText.Foreground = ThemeColors.Brush(() => ThemeColors.AccentText, "accentText");
+        if (value == "nothing") WhenDoneIcon.ClearValue(FontIcon.ForegroundProperty);
+        else WhenDoneIcon.Foreground = ThemeColors.Brush(() => ThemeColors.AccentText, "accentText");
+    }
+
+    private void OnWhenDoneMenuOpening(object? sender, object e) =>
+        AfterDownload.FillMenu(WhenDoneMenu.Items, ViewModel.Core, AfterDownload.QueueAction(ViewModel.Core));
+
+    /// <summary>A dialog counting down; true when it ran out or "Now" was pressed. {0} is the seconds left.</summary>
+    public async Task<bool> ConfirmCountdown(string message, int seconds)
     {
         var text = new TextBlock { TextWrapping = TextWrapping.Wrap };
         var dialog = new ContentDialog
@@ -305,6 +348,7 @@ public sealed partial class MainWindow : Window
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot,
+            RequestedTheme = ((FrameworkElement)Content).ActualTheme,
         };
         var left = seconds;
         var timer = DispatcherQueue.CreateTimer();
@@ -313,7 +357,7 @@ public sealed partial class MainWindow : Window
         timer.Tick += (_, _) =>
         {
             left--;
-            text.Text = $"The computer will {action} in {left} seconds.";
+            text.Text = string.Format(message, left);
             if (left <= 0)
             {
                 timedOut = true;
@@ -321,7 +365,7 @@ public sealed partial class MainWindow : Window
                 dialog.Hide();
             }
         };
-        text.Text = $"The computer will {action} in {left} seconds.";
+        text.Text = string.Format(message, left);
         timer.Start();
         var result = await dialog.ShowAsync();
         timer.Stop();
@@ -402,6 +446,7 @@ public sealed partial class MainWindow : Window
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot,
+            RequestedTheme = ((FrameworkElement)Content).ActualTheme,
         };
         var choice = await dialog.ShowAsync();
         if (choice == ContentDialogResult.None) return;
@@ -537,6 +582,7 @@ public sealed partial class MainWindow : Window
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot,
+            RequestedTheme = ((FrameworkElement)Content).ActualTheme,
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         var value = double.IsNaN(amount.Value) ? 0 : amount.Value;
@@ -568,6 +614,7 @@ public sealed partial class MainWindow : Window
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot,
+            RequestedTheme = ((FrameworkElement)Content).ActualTheme,
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) await Remove([item], deleteFile: true);
     }

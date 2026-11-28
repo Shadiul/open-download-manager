@@ -255,6 +255,29 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   chrome.storage.session.remove([mediaStoreKey(tabId), videoStoreKey(tabId), playingKey(tabId)]);
 });
 
+// ---------- toolbar icon ----------
+
+// The toolbar button is a one-colour glyph: dark on a light toolbar, white on a dark one. A service
+// worker cannot read prefers-color-scheme, so a small offscreen page watches it and reports here.
+function setToolbarIcon(dark) {
+  const theme = dark ? 'dark' : 'light';
+  chrome.action.setIcon({ path: { 16: `icons/toolbar-${theme}-16.png`, 32: `icons/toolbar-${theme}-32.png` } }).catch(() => {});
+}
+
+async function watchBrowserTheme() {
+  try {
+    if (await chrome.offscreen.hasDocument()) return;
+    await chrome.offscreen.createDocument({
+      url: 'offscreen/theme.html',
+      reasons: ['MATCH_MEDIA'],
+      justification: "Match the toolbar icon to the browser's light or dark theme."
+    });
+  } catch {
+    // Another start-up made it first, or offscreen pages are unavailable: the default icon stays.
+  }
+}
+watchBrowserTheme();
+
 // ---------- right-click menu ----------
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -427,6 +450,10 @@ async function handleMessage(msg, sender) {
         return { ok: false, error: e.message };
       }
     }
+
+    case 'browser-theme':
+      setToolbarIcon(msg.dark);
+      return { ok: true };
 
     default:
       return { ok: false, error: `Unknown message ${msg.type}` };
