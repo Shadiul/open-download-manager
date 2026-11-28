@@ -137,6 +137,7 @@ paste a link, **Pause all**, and what to do when everything is done.
 
 ### After a download
 
+<!-- Placeholder: complete-light/-dark.png show the completion window before its redesign; recapture once it is in dev. -->
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/complete-dark.png">
