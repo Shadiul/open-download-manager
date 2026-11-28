@@ -304,6 +304,13 @@ public sealed partial class MainWindow : Window
         if (args.SelectedItem is NavigationViewItem { Tag: string tag }) ViewModel.Filter = tag;
     }
 
+    /// <summary>Shows the Settings page (from the tray).</summary>
+    public void ShowSettings() => Nav.SelectedItem = Nav.SettingsItem;
+
+    /// <summary>Shows the finished downloads (from the tray's "See all").</summary>
+    public void ShowFinished() =>
+        Nav.SelectedItem = Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => i.Tag as string == "completed") ?? Nav.SelectedItem;
+
     public async void OpenAddDialog(string? url, bool probe = false)
     {
         var dialog = new AddDownloadDialog(ViewModel.Core, Hwnd, url, probe) { XamlRoot = Content.XamlRoot };
