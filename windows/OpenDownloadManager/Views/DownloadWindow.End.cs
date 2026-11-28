@@ -546,6 +546,7 @@ public sealed partial class DownloadWindow
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot,
+            RequestedTheme = ((FrameworkElement)Content).ActualTheme,
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         await _core.CallAsync(new { type = "remove", id = _item.Id, deleteFile = true });

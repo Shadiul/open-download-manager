@@ -313,7 +313,7 @@ public sealed partial class MainWindow : Window
 
     public async void OpenAddDialog(string? url, bool probe = false)
     {
-        var dialog = new AddDownloadDialog(ViewModel.Core, Hwnd, url, probe) { XamlRoot = Content.XamlRoot };
+        var dialog = new AddDownloadDialog(ViewModel.Core, Hwnd, url, probe) { XamlRoot = Content.XamlRoot, RequestedTheme = ((FrameworkElement)Content).ActualTheme };
         await dialog.ShowAsync();
         if (dialog.Error is { } error) ShowError(error);
     }
@@ -348,6 +348,7 @@ public sealed partial class MainWindow : Window
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot,
+            RequestedTheme = ((FrameworkElement)Content).ActualTheme,
         };
         var left = seconds;
         var timer = DispatcherQueue.CreateTimer();
@@ -445,6 +446,7 @@ public sealed partial class MainWindow : Window
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot,
+            RequestedTheme = ((FrameworkElement)Content).ActualTheme,
         };
         var choice = await dialog.ShowAsync();
         if (choice == ContentDialogResult.None) return;
@@ -580,6 +582,7 @@ public sealed partial class MainWindow : Window
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot,
+            RequestedTheme = ((FrameworkElement)Content).ActualTheme,
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         var value = double.IsNaN(amount.Value) ? 0 : amount.Value;
@@ -611,6 +614,7 @@ public sealed partial class MainWindow : Window
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot,
+            RequestedTheme = ((FrameworkElement)Content).ActualTheme,
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) await Remove([item], deleteFile: true);
     }
