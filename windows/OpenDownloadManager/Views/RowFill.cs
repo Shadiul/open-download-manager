@@ -38,6 +38,21 @@ public static class RowFill
     private static readonly ConditionalWeakTable<Grid, State> States = [];
     private static readonly Dictionary<(Color, int, bool, double), ImageBrush> Images = [];
 
+    private static readonly Windows.UI.ViewManagement.UISettings Ui = new();
+
+    /// <summary>Windows' "Animation effects" (Accessibility, Visual effects) is on.</summary>
+    public static bool WindowsAnimates
+    {
+        get
+        {
+            try { return Ui.AnimationsEnabled; }
+            catch { return true; }
+        }
+    }
+
+    /// <summary>Styles drawn in the Progress column (ProgressCell) leave the row itself empty.</summary>
+    private static bool Unfilled(string style) => style is "none" or "ring" or "bar";
+
     public static void Attach(Grid root)
     {
         try
@@ -282,7 +297,7 @@ public static class RowFill
             {
                 layer.Height = underline ? 3 : double.NaN;
                 layer.VerticalAlignment = underline ? VerticalAlignment.Bottom : VerticalAlignment.Stretch;
-                layer.Visibility = style == "none" ? Visibility.Collapsed : Visibility.Visible;
+                layer.Visibility = Unfilled(style) ? Visibility.Collapsed : Visibility.Visible;
             }
 
             switch (style)
@@ -308,7 +323,7 @@ public static class RowFill
                     // A glint running along the line.
                     UseSoftBand(true, Color.FromArgb(120, 255, 255, 255), Color.FromArgb(200, 255, 255, 255));
                     break;
-                case "none":
+                case "none" or "ring" or "bar":
                     break;
                 default:
                     _lit.Background = DotImage(Alpha(color, k / 1.5), height, even: false, scale);
@@ -403,7 +418,7 @@ public static class RowFill
         {
             var width = (float)_root.ActualWidth;
             var running = _item?.State is "downloading" or "finishing" && width > 0 && _live
-                && ViewSettings.Current.Animation != "off" && Style != "none";
+                && ViewSettings.Current.Animation != "off" && WindowsAnimates && !Unfilled(Style);
             if (!running) { StopSweep(); return; }
             _sweep.InsertScalar("W", width);
             var finishing = _item!.State == "finishing";

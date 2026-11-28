@@ -27,7 +27,7 @@ public sealed class AppSettings
     public string Accent { get; set; } = "system";
     /// <summary>mica, micaAlt, acrylic or solid.</summary>
     public string Backdrop { get; set; } = "mica";
-    /// <summary>dots, solid, glass, stripes, underline or none.</summary>
+    /// <summary>dots, solid, glass, stripes, underline, none, ring or bar (the last two draw in the Progress column).</summary>
     public string ProgressStyle { get; set; } = "dots";
     /// <summary>off, calm or lively: the band that sweeps along a downloading row.</summary>
     public string Animation { get; set; } = "calm";

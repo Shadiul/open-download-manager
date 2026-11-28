@@ -61,8 +61,8 @@ public sealed partial class SettingsPage : UserControl
     private readonly ComboBox _strength = new() { Items = { "Subtle", "Normal", "Vivid" }, MinWidth = 180 };
     private readonly ComboBox _colorBy = new() { Items = { "Download status", "File type" }, MinWidth = 180 };
     private readonly ComboBox _density = new() { Items = { "Compact", "Standard", "Comfortable" }, MinWidth = 180 };
-    private readonly StackPanel _swatches = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
-    private readonly Grid _styleTiles = new() { ColumnSpacing = 8, RowSpacing = 8 };
+    private readonly GridView _swatches = Picker("Accent colour", followFocus: false);
+    private readonly GridView _styleTiles = Picker("Row progress", followFocus: true);
 
     // System
     private readonly ToggleSwitch _startWithWindows = Switch();
@@ -83,6 +83,20 @@ public sealed partial class SettingsPage : UserControl
         ("stripes", "Stripes"),
         ("underline", "Underline"),
         ("none", "Text only"),
+        ("ring", "Ring"),
+        ("bar", "Column bar"),
+    ];
+
+    private static readonly string[] RowStyleHints =
+    [
+        "Lit dots across the row, like an LED panel.",
+        "A flat tint across the row.",
+        "A tint that fades from top to bottom.",
+        "Diagonal stripes across the row.",
+        "A thin line along the bottom of the row.",
+        "The percentage only.",
+        "A small circle in the Progress column that fills as it goes, with the percentage inside.",
+        "A thin bar in the Progress column, under the percentage.",
     ];
 
     public SettingsPage(CoreClient core, AppSettings app, IntPtr hwnd)
@@ -98,6 +112,11 @@ public sealed partial class SettingsPage : UserControl
 
         // ----- Downloads -----
         var browse = new Button { Content = "Browse…" };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_folder, "Download folder");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_speed, "Speed limit");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_speedUnit, "Speed limit unit");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_start, "Start time");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_stop, "Stop time");
         browse.Click += async (_, _) => await PickFolder();
         var times = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _start, new TextBlock { Text = "to", VerticalAlignment = VerticalAlignment.Center }, _stop } };
         Section(page, "Downloads", "\uE896");
@@ -152,7 +171,7 @@ public sealed partial class SettingsPage : UserControl
         page.Children.Add(Card("\uE793", "Theme", null, _theme));
         page.Children.Add(Card("\uE790", "Accent colour", "For buttons, switches, selection and the rows.", null, extra: _swatches));
         page.Children.Add(Card("\uE7F4", "Window material", "Mica takes on the desktop's colours; Acrylic shows it through, blurred.", _backdrop));
-        page.Children.Add(Card("\uE9D9", "Row progress", "How each download shows its progress across its row.", null, extra: _styleTiles));
+        page.Children.Add(Card("\uE9D9", "Row progress", "How each download shows its progress: across its row, or in the Progress column.", null, extra: _styleTiles));
         page.Children.Add(Card("\uE945", "Animation", "A band of light that moves along downloading rows.", _animation));
         page.Children.Add(Card("\uE706", "Fill strength", "How strongly rows are tinted.", _strength));
         page.Children.Add(Card("\uE8EC", "Colour rows by", "File type gives video, music, documents, programs and archives each a colour.", _colorBy));
@@ -180,7 +199,13 @@ public sealed partial class SettingsPage : UserControl
         page.Children.Add(Card("\uE946", $"Open Download Manager {typeof(App).Assembly.GetName().Version?.ToString(3)}", "Free and open source under GPL-3.0.", welcome));
         page.Children.Add(Card("\uE8B7", "Data folder", "Download history, settings and app.log.", openData));
 
-        _scroller.Content = new Grid { Padding = new Thickness(24, 0, 24, 32), Children = { page } };
+        // A click on a card's text or on empty space must not move the focus. Left alone, the press
+        // reaches the page's ScrollViewer, which hands focus to its first focusable child (the
+        // download folder box at the very top) and scrolls that into view: the page jumped back to
+        // the top. Controls handle their own presses before they get here, so they still take focus.
+        var content = new Grid { Padding = new Thickness(24, 0, 24, 32), Background = new SolidColorBrush(Colors.Transparent), Children = { page } };
+        content.PointerPressed += (_, e) => e.Handled = true;
+        _scroller.Content = content;
         _scroller.ViewChanged += (_, _) => FollowScroll();
         _sections.SelectionChanged += (_, _) => JumpToSection();
 
@@ -206,8 +231,15 @@ public sealed partial class SettingsPage : UserControl
         Load();
         BuildSwatches();
         BuildStyleTiles();
+        SyncSwatches();
+        SyncStyleTiles();
         Wire();
         _loading = false;
+
+        // Accent or style changed elsewhere (or Windows' accent): move the selection to match.
+        Listen(true);
+        Loaded += (_, _) => { Listen(true); SyncSwatches(); SyncStyleTiles(); };
+        Unloaded += (_, _) => Listen(false);
 
         AfterDownload.QueueActionChanged += OnQueueActionChanged;
         Unloaded += (_, _) => AfterDownload.QueueActionChanged -= OnQueueActionChanged;
@@ -268,6 +300,9 @@ public sealed partial class SettingsPage : UserControl
         grid.Children.Add(text);
         if (control is not null)
         {
+            // Screen readers and UI Automation name a switch or a list by its card's title.
+            if (string.IsNullOrEmpty(Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(control)))
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(control, title);
             if (wide)
             {
                 text.Children.Add(control);
@@ -383,13 +418,13 @@ public sealed partial class SettingsPage : UserControl
 
     private static Grid PreviewRow(DownloadItem item)
     {
-        var row = new Grid { Height = 40, ColumnSpacing = 12 };
+        var row = new Grid { Height = 40, ColumnSpacing = 12, DataContext = item };
         row.Children.Add(FillGrid(item));
         var line = new Grid { ColumnSpacing = 12, Padding = new Thickness(12, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
-        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });
         line.Children.Add(new FontIcon { Glyph = item.Glyph, FontSize = 16 });
         var name = new TextBlock { Text = item.FileName, TextTrimming = TextTrimming.CharacterEllipsis };
         Grid.SetColumn(name, 1);
@@ -397,23 +432,48 @@ public sealed partial class SettingsPage : UserControl
         var size = new TextBlock { Text = item.SizeText, Style = ThemedStyles.Text(caption: false, secondary: true), TextTrimming = TextTrimming.CharacterEllipsis };
         Grid.SetColumn(size, 2);
         line.Children.Add(size);
-        var progress = new TextBlock { Text = item.ProgressText, HorizontalAlignment = HorizontalAlignment.Center, Foreground = item.StatusBrush };
+        // The list's own Progress column: words, or the ring or bar.
+        var progress = new ProgressCell();
         Grid.SetColumn(progress, 3);
         line.Children.Add(progress);
         row.Children.Add(line);
         return row;
     }
 
+    // The swatches and the style tiles are GridViews: the selection, pointer-over and pressed looks,
+    // the focus rectangle and arrow keys are the platform's. Changing a setting only moves the
+    // selection; nothing is rebuilt, so focus and the scroll position stay where they are.
+
+    /// <summary>A GridView that lays out its items but never scrolls; the page scrolls instead.</summary>
+    private static GridView Picker(string name, bool followFocus)
+    {
+        var view = new GridView
+        {
+            SelectionMode = ListViewSelectionMode.Single,
+            SingleSelectionFollowsFocus = followFocus,
+            IsItemClickEnabled = false,
+            Padding = new Thickness(0),
+        };
+        ScrollViewer.SetVerticalScrollMode(view, ScrollMode.Disabled);
+        ScrollViewer.SetVerticalScrollBarVisibility(view, ScrollBarVisibility.Disabled);
+        ScrollViewer.SetHorizontalScrollMode(view, ScrollMode.Disabled);
+        ScrollViewer.SetHorizontalScrollBarVisibility(view, ScrollBarVisibility.Disabled);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(view, name);
+        return view;
+    }
+
+    private bool _syncing;
+    private GridViewItem? _customSwatch;
+
+    private static Windows.UI.Color WindowsAccent => new Windows.UI.ViewManagement.UISettings().GetColorValue(Windows.UI.ViewManagement.UIColorType.Accent);
+
     private void BuildSwatches()
     {
-        _swatches.Children.Clear();
-        var current = ViewSettings.Current.Accent;
-        _swatches.Children.Add(Swatch("system", new Windows.UI.ViewManagement.UISettings().GetColorValue(Windows.UI.ViewManagement.UIColorType.Accent), "Windows accent", "\uE782", current == "system"));
+        _swatches.Items.Add(Swatch("system", "Windows accent", ""));
         foreach (var (name, hex) in Appearance.Presets)
-            _swatches.Children.Add(Swatch(hex, Appearance.TryParse(hex)!.Value, name, null, string.Equals(current, hex, StringComparison.OrdinalIgnoreCase)));
+            _swatches.Items.Add(Swatch(hex, name, null));
 
-        // Any colour: a picker in a flyout.
-        var isCustom = current != "system" && !Appearance.Presets.Any(p => string.Equals(p.Hex, current, StringComparison.OrdinalIgnoreCase));
+        // Any colour: a picker in a flyout, opened by choosing the last swatch.
         var picker = new ColorPicker
         {
             IsAlphaEnabled = false,
@@ -421,7 +481,6 @@ public sealed partial class SettingsPage : UserControl
             IsColorSliderVisible = true,
             IsColorChannelTextInputVisible = false,
             IsHexInputVisible = true,
-            Color = Appearance.CustomAccent ?? Appearance.TryParse("#0F6CBD")!.Value,
         };
         var use = new Button { Content = "Use this colour", HorizontalAlignment = HorizontalAlignment.Right, Style = Res<Style>("AccentButtonStyle") };
         var flyout = new Flyout { Content = new StackPanel { Spacing = 12, Children = { picker, use } } };
@@ -429,103 +488,164 @@ public sealed partial class SettingsPage : UserControl
         {
             flyout.Hide();
             ViewSettings.Current.Accent = Appearance.ToHex(picker.Color);
-            BuildSwatches();
         };
-        var custom = SwatchShell(isCustom && Appearance.CustomAccent is { } c ? new SolidColorBrush(c) : null, "Pick any colour", "\uE710", isCustom);
-        custom.Flyout = flyout;
-        _swatches.Children.Add(custom);
-    }
+        _customSwatch = Swatch("custom", "Pick any colour", "");
+        _swatches.Items.Add(_customSwatch);
 
-    private Button Swatch(string value, Windows.UI.Color color, string name, string? glyph, bool selected)
-    {
-        var button = SwatchShell(new SolidColorBrush(color), name, glyph, selected);
-        button.Click += (_, _) =>
+        _swatches.SelectionChanged += (_, _) =>
         {
-            ViewSettings.Current.Accent = value;
-            BuildSwatches();
+            if (_syncing) return;
+            if (_swatches.SelectedItem is GridViewItem { Tag: "custom" } custom)
+            {
+                picker.Color = Appearance.CustomAccent ?? Appearance.TryParse("#0F6CBD")!.Value;
+                flyout.ShowAt(custom);
+            }
+            else if (_swatches.SelectedItem is GridViewItem { Tag: string value }) ViewSettings.Current.Accent = value;
+            // The selection shows the accent in use: the custom swatch only once a colour is picked.
+            DispatcherQueue.TryEnqueue(SyncSwatches);
         };
-        return button;
     }
 
-    /// <summary>A round colour button; the chosen one has a ring and a check.</summary>
-    private static Button SwatchShell(Brush? fill, string name, string? glyph, bool selected)
+    /// <summary>A round colour swatch; the platform draws the selection ring around it, the check is ours.</summary>
+    private static GridViewItem Swatch(string value, string name, string? glyph)
     {
-        var dot = new Border
+        var dot = new Grid
         {
             Width = 28,
             Height = 28,
             CornerRadius = new CornerRadius(14),
-            Background = fill,
-            BorderThickness = new Thickness(fill is null ? 1 : 0),
-            Style = fill is null ? ThemedStyles.Get("Border", null, ("BorderBrush", "ControlStrongStrokeColorDefaultBrush")) : null,
+            BorderThickness = new Thickness(1),
+            Style = ThemedStyles.Get("Grid", null, ("BorderBrush", "ControlStrokeColorDefaultBrush")),
         };
-        if (selected) dot.Child = new FontIcon { Glyph = "\uE73E", FontSize = 13, Foreground = new SolidColorBrush(Colors.White) };
-        else if (glyph is not null)
+        if (glyph is not null) dot.Children.Add(new FontIcon { Glyph = glyph, FontSize = 12, Tag = "glyph" });
+        dot.Children.Add(new FontIcon { Glyph = "", FontSize = 13, Foreground = new SolidColorBrush(Colors.White), Visibility = Visibility.Collapsed, Tag = "check" });
+        var item = new GridViewItem
         {
-            var icon = new FontIcon { Glyph = glyph, FontSize = 12 };
-            if (fill is not null) icon.Foreground = new SolidColorBrush(Colors.White);
-            dot.Child = icon;
-        }
-        var ring = new Border
-        {
-            Width = 36,
-            Height = 36,
-            CornerRadius = new CornerRadius(18),
-            BorderThickness = new Thickness(selected ? 2 : 0),
-            Style = ThemedStyles.Get("Border", null, ("BorderBrush", "TextFillColorPrimaryBrush")),
-            Child = new Grid { Children = { dot }, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
-        };
-        var button = new Button
-        {
-            Content = ring,
+            Tag = value,
+            Content = dot,
+            Width = 40,
+            Height = 40,
+            MinWidth = 0,
+            MinHeight = 0,
             Padding = new Thickness(0),
-            Background = new SolidColorBrush(Colors.Transparent),
-            BorderThickness = new Thickness(0),
+            Margin = new Thickness(0, 0, 6, 0),
+            CornerRadius = new CornerRadius(20),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
         };
-        ToolTipService.SetToolTip(button, name);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, name);
-        return button;
+        ToolTipService.SetToolTip(item, name);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(item, name);
+        return item;
     }
 
-    /// <summary>One tile per row style, each a small live row in that style; the chosen one is outlined.</summary>
+    /// <summary>Selects the swatch in use and paints the dots; called after any accent change.</summary>
+    private void SyncSwatches()
+    {
+        var current = ViewSettings.Current.Accent;
+        var isCustom = current != "system" && !Appearance.Presets.Any(p => string.Equals(p.Hex, current, StringComparison.OrdinalIgnoreCase));
+        GridViewItem? selected = null;
+        foreach (var item in _swatches.Items.OfType<GridViewItem>())
+        {
+            var value = (string)item.Tag;
+            var dot = (Grid)item.Content;
+            Windows.UI.Color? color = value switch
+            {
+                "system" => WindowsAccent,
+                "custom" => isCustom ? Appearance.CustomAccent : null,
+                _ => Appearance.TryParse(value),
+            };
+            dot.Background = color is { } c ? new SolidColorBrush(c) : null;
+            var on = value == "custom" ? isCustom : string.Equals(value, current, StringComparison.OrdinalIgnoreCase);
+            if (on) selected = item;
+            foreach (var icon in dot.Children.OfType<FontIcon>())
+            {
+                if ((string)icon.Tag == "check") icon.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+                else
+                {
+                    icon.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+                    if (color is not null) icon.Foreground = new SolidColorBrush(Colors.White);
+                    else icon.ClearValue(FontIcon.ForegroundProperty);
+                }
+            }
+        }
+        _syncing = true;
+        _swatches.SelectedItem = selected;
+        _syncing = false;
+    }
+
+    /// <summary>One tile per row style, each a small live row in that style.</summary>
     private void BuildStyleTiles()
     {
-        _styleTiles.Children.Clear();
-        _styleTiles.ColumnDefinitions.Clear();
-        _styleTiles.RowDefinitions.Clear();
-        const int columns = 3;
-        for (var c = 0; c < columns; c++) _styleTiles.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        for (var r = 0; r < (RowStyles.Length + columns - 1) / columns; r++) _styleTiles.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         for (var i = 0; i < RowStyles.Length; i++)
         {
             var (value, label) = RowStyles[i];
-            var selected = ViewSettings.Current.ProgressStyle == value;
-            var sample = new Grid { Height = 30 };
-            sample.Children.Add(FillGrid(Sample(910000 + (ulong)i, "sample.iso", "downloading", 0.62, 100_000_000, 5_000_000), value));
-            sample.Children.Add(new TextBlock { Text = "62%", FontSize = 12, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-            var tile = new Button
+            var item = Sample(910000 + (ulong)i, "sample.iso", "downloading", 0.62, 100_000_000, 5_000_000);
+            var sample = new Grid { Height = 34, DataContext = item };
+            if (value is "ring" or "bar")
+                sample.Children.Add(new ProgressCell { Tag = value, HorizontalAlignment = value == "bar" ? HorizontalAlignment.Stretch : HorizontalAlignment.Left });
+            else
             {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
+                sample.Children.Add(FillGrid(item, value));
+                sample.Children.Add(new TextBlock { Text = "62%", FontSize = 12, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+            }
+            var tile = new GridViewItem
+            {
+                Tag = value,
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                VerticalContentAlignment = VerticalAlignment.Stretch,
                 Padding = new Thickness(10, 10, 10, 8),
-                BorderThickness = new Thickness(selected ? 2 : 1),
+                Margin = new Thickness(0, 0, 8, 8),
                 Content = new StackPanel
                 {
                     Spacing = 8,
-                    Children = { sample, new TextBlock { Text = label, Style = ThemedStyles.Text(caption: true, secondary: !selected) } },
+                    Children = { sample, new TextBlock { Text = label, Style = ThemedStyles.Text(caption: true, secondary: false) } },
                 },
             };
-            if (selected) tile.Style = ThemedStyles.Get("Button", "DefaultButtonStyle", ("BorderBrush", "AccentFillColorDefaultBrush"));
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tile, label);
-            tile.Click += (_, _) =>
-            {
-                ViewSettings.Current.ProgressStyle = value;
-                BuildStyleTiles();
-            };
-            Grid.SetColumn(tile, i % columns);
-            Grid.SetRow(tile, i / columns);
-            _styleTiles.Children.Add(tile);
+            ToolTipService.SetToolTip(tile, RowStyleHints[i]);
+            _styleTiles.Items.Add(tile);
         }
+        _styleTiles.SelectionChanged += (_, _) =>
+        {
+            if (_syncing) return;
+            if (_styleTiles.SelectedItem is GridViewItem { Tag: string value }) ViewSettings.Current.ProgressStyle = value;
+            else DispatcherQueue.TryEnqueue(SyncStyleTiles);
+        };
+        // Equal columns that fill the card: four across, two when narrow.
+        _styleTiles.SizeChanged += (_, e) => SizeTiles(e.NewSize.Width);
+        _styleTiles.Loaded += (_, _) => SizeTiles(_styleTiles.ActualWidth);
+    }
+
+    private void SizeTiles(double width)
+    {
+        if (width <= 0 || _styleTiles.ItemsPanelRoot is not ItemsWrapGrid panel) return;
+        var columns = width >= 640 ? 4 : 2;
+        var w = Math.Floor(width / columns);
+        if (double.IsNaN(panel.ItemWidth) || Math.Abs(panel.ItemWidth - w) >= 1) panel.ItemWidth = w;
+    }
+
+    private void SyncStyleTiles()
+    {
+        var current = ViewSettings.Current.ProgressStyle;
+        var tiles = _styleTiles.Items.OfType<GridViewItem>().ToList();
+        _syncing = true;
+        _styleTiles.SelectedItem = tiles.FirstOrDefault(t => (string)t.Tag == current) ?? tiles[0];
+        _syncing = false;
+    }
+
+    private void OnViewSettingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ViewSettings.Accent)) SyncSwatches();
+        else if (e.PropertyName == nameof(ViewSettings.ProgressStyle)) SyncStyleTiles();
+    }
+
+    private void Listen(bool on)
+    {
+        ViewSettings.Current.PropertyChanged -= OnViewSettingChanged;
+        ThemeColors.Changed -= SyncSwatches;
+        if (!on) return;
+        ViewSettings.Current.PropertyChanged += OnViewSettingChanged;
+        ThemeColors.Changed += SyncSwatches;
     }
 
     // ----- load and save -----

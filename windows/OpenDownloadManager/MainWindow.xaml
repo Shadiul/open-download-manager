@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:OpenDownloadManager.Models"
     xmlns:services="using:OpenDownloadManager.Services"
+    xmlns:views="using:OpenDownloadManager.Views"
     Title="Open Download Manager">
 
     <Window.SystemBackdrop>
@@ -406,15 +407,10 @@
                                 </Grid>
                                 <TextBlock Grid.Column="1" Width="130" Style="{StaticResource Cell}" Text="{x:Bind SizeText, Mode=OneWay}"
                                            Visibility="{x:Bind services:ViewSettings.Current.SizeColumn, Mode=OneWay}" />
-                                <!-- Progress as text, centred in its column; the row itself shows it as a fill. -->
-                                <Grid Grid.Column="2" Width="170" VerticalAlignment="Center"
-                                      Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
-                                        <FontIcon Glyph="{x:Bind StateGlyph, Mode=OneWay}" FontSize="12" Foreground="{x:Bind StatusBrush, Mode=OneWay}"
-                                                  Visibility="{x:Bind StateVisible, Mode=OneWay}" />
-                                        <TextBlock Style="{StaticResource Cell}" Text="{x:Bind ProgressText, Mode=OneWay}" Foreground="{x:Bind StatusBrush, Mode=OneWay}" />
-                                    </StackPanel>
-                                </Grid>
+                                <!-- The Progress column: words for most styles (the row itself is the fill), or a
+                                     ring or a bar with the percentage for those two styles. Views/ProgressCell.cs. -->
+                                <views:ProgressCell Grid.Column="2" Width="170"
+                                      Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}" />
                                 <TextBlock Grid.Column="3" Width="90" Style="{StaticResource Cell}" Text="{x:Bind SpeedText, Mode=OneWay}"
                                            Visibility="{x:Bind services:ViewSettings.Current.SpeedColumn, Mode=OneWay}" />
                                 <TextBlock Grid.Column="4" Width="80" Style="{StaticResource Cell}" Text="{x:Bind TimeLeftText, Mode=OneWay}"
