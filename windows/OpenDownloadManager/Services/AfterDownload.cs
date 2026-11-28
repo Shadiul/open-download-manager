@@ -61,8 +61,23 @@ public static class AfterDownload
     /// Unpacks into a folder named after the archive, next to it, with Windows' own tar (which reads
     /// zip, 7z, rar and tar archives). The archive goes to the Recycle Bin afterwards if asked.
     /// </summary>
+    /// <summary>
+    /// An archive's extraction started (target null, ok false), finished (target set, ok true) or
+    /// failed (ok false). Raised on a background thread.
+    /// </summary>
+    public static event Action<string, string?, bool>? ExtractChanged;
+
     public static bool Extract(string archive, bool deleteAfter)
     {
+        ExtractChanged?.Invoke(archive, null, false);
+        var ok = ExtractCore(archive, deleteAfter, out var folder);
+        ExtractChanged?.Invoke(archive, folder ?? "", ok);
+        return ok;
+    }
+
+    private static bool ExtractCore(string archive, bool deleteAfter, out string? folder)
+    {
+        folder = null;
         try
         {
             var dir = Path.GetDirectoryName(archive)!;
@@ -89,6 +104,7 @@ public static class AfterDownload
                 return false;
             }
             if (deleteAfter) Recycle(archive);
+            folder = target;
             Shell.ShowInFolder(null, target);
             return true;
         }
