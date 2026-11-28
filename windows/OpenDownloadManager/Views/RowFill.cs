@@ -50,8 +50,25 @@ public static class RowFill
         }
     }
 
-    /// <summary>Styles drawn in the Progress column (ProgressCell) leave the row itself empty.</summary>
-    private static bool Unfilled(string style) => style is "none" or "ring" or "bar";
+    /// <summary>
+    /// A thin line or bar (an underline, the Progress column's bar) in one of the four looks, drawn
+    /// strong because it is thin. <paramref name="height"/> is in view pixels.
+    /// </summary>
+    public static Brush LineBrush(string look, Color color, double strength, int height, double scale) => look switch
+    {
+        "glass" => VerticalBrush(Alpha(color, Math.Min(1, 0.95 * strength)), Alpha(color, 0.45 * strength)),
+        "stripes" => StripeImage(color, height, scale, Math.Min(1, 0.9 * strength), 0.35 * strength),
+        // Every dot at full strength: on a line this thin the LED-like variation only looks faint.
+        "dots" => DotImage(Alpha(color, Math.Min(1, 0.6 + 0.4 * strength)), height, even: true, scale),
+        _ => new SolidColorBrush(Alpha(color, Math.Min(1, 0.45 + 0.55 * strength))),
+    };
+
+    private static LinearGradientBrush VerticalBrush(Color top, Color bottom) => new()
+    {
+        StartPoint = new Windows.Foundation.Point(0, 0),
+        EndPoint = new Windows.Foundation.Point(0, 1),
+        GradientStops = { new GradientStop { Color = top, Offset = 0 }, new GradientStop { Color = bottom, Offset = 1 } },
+    };
 
     public static void Attach(Grid root)
     {
@@ -271,14 +288,31 @@ public static class RowFill
             _ => ThemeColors.Accent,
         };
 
-        /// <summary>The chosen row style; a row whose Tag names a style (Settings' style tiles) keeps that one.</summary>
-        private string Style => _root.Tag as string ?? ViewSettings.Current.ProgressStyle;
+        /// <summary>
+        /// The row's shape (bar, underline or none) and look (dots, solid, glass or stripes). A row
+        /// whose Tag is "shape:look" (Settings' tiles) keeps those; "*" takes the setting, and a tile
+        /// showing a look when rows are off shows it as a bar.
+        /// </summary>
+        private (string Shape, string Look) Spec
+        {
+            get
+            {
+                var shape = ViewSettings.Current.RowProgress;
+                var look = ViewSettings.Current.RowLook;
+                if (_root.Tag is string tag && tag.Split(':') is [var s, var l])
+                {
+                    shape = s != "*" ? s : shape == "none" ? "bar" : shape;
+                    if (l != "*") look = l;
+                }
+                return (shape, look);
+            }
+        }
 
         private static double Strength => ViewSettings.Current.FillStrength switch { "subtle" => 0.6, "vivid" => 1.5, _ => 1.0 };
 
         /// <summary>
-        /// Draws the row in the chosen style: the lit part up to the progress, a faint track after it,
-        /// and the two layers of the sweep, all in the state's (or file type's) colour.
+        /// Draws the row in the chosen shape and look: the lit part up to the progress, a faint track
+        /// after it, and the two layers of the sweep, all in the state's (or file type's) colour.
         /// </summary>
         private void Paint()
         {
@@ -289,18 +323,31 @@ public static class RowFill
             var k = Strength;
             var dark = ThemeColors.IsDark;
             var ink = dark ? Color.FromArgb(255, 255, 255, 255) : Color.FromArgb(255, 0, 0, 0);
-            var style = Style;
+            var (shape, look) = Spec;
 
-            // A thin line along the bottom of the row; every other style fills the row's height.
-            var underline = style == "underline";
+            // Underline: a thin line along the bottom of the row; a bar fills the row's height.
+            var underline = shape == "underline";
             foreach (var layer in new FrameworkElement[] { _unlit, _lit })
             {
                 layer.Height = underline ? 3 : double.NaN;
                 layer.VerticalAlignment = underline ? VerticalAlignment.Bottom : VerticalAlignment.Stretch;
-                layer.Visibility = Unfilled(style) ? Visibility.Collapsed : Visibility.Visible;
+                layer.Visibility = shape == "none" ? Visibility.Collapsed : Visibility.Visible;
+            }
+            if (shape == "none") return;
+
+            if (underline)
+            {
+                // The line is thin, so every look is drawn strong; a white glint runs along it.
+                var h = 3;
+                _lit.Background = LineBrush(look, color, k, h, scale);
+                _unlit.Background = look == "dots"
+                    ? DotImage(Alpha(ink, dark ? 0.22 : 0.16), h, even: true, scale)
+                    : new SolidColorBrush(Alpha(ink, 0.10));
+                UseSoftBand(true, Color.FromArgb(120, 255, 255, 255), Color.FromArgb(200, 255, 255, 255));
+                return;
             }
 
-            switch (style)
+            switch (look)
             {
                 case "solid":
                     _lit.Background = new SolidColorBrush(Alpha(color, (dark ? 0.24 : 0.17) * k));
@@ -316,14 +363,6 @@ public static class RowFill
                     _lit.Background = StripeImage(color, height, scale, (dark ? 0.30 : 0.22) * k, (dark ? 0.14 : 0.09) * k);
                     _unlit.Background = new SolidColorBrush(Alpha(ink, 0.03));
                     UseSoftBand(true, Alpha(color, 0.14 * k), Alpha(color, 0.24 * k));
-                    break;
-                case "underline":
-                    _lit.Background = new SolidColorBrush(Alpha(color, Math.Min(1, 0.85 * k)));
-                    _unlit.Background = new SolidColorBrush(Alpha(ink, 0.10));
-                    // A glint running along the line.
-                    UseSoftBand(true, Color.FromArgb(120, 255, 255, 255), Color.FromArgb(200, 255, 255, 255));
-                    break;
-                case "none" or "ring" or "bar":
                     break;
                 default:
                     _lit.Background = DotImage(Alpha(color, k / 1.5), height, even: false, scale);
@@ -418,7 +457,7 @@ public static class RowFill
         {
             var width = (float)_root.ActualWidth;
             var running = _item?.State is "downloading" or "finishing" && width > 0 && _live
-                && ViewSettings.Current.Animation != "off" && WindowsAnimates && !Unfilled(Style);
+                && ViewSettings.Current.Animation != "off" && WindowsAnimates && Spec.Shape != "none";
             if (!running) { StopSweep(); return; }
             _sweep.InsertScalar("W", width);
             var finishing = _item!.State == "finishing";

@@ -99,8 +99,25 @@ public sealed partial class ProgressCell : Grid
         MaxLines = 1,
     };
 
-    /// <summary>The chosen style; a cell whose Tag names one (Settings' previews) keeps it.</summary>
-    private string RowStyle => Tag as string ?? ViewSettings.Current.ProgressStyle;
+    /// <summary>
+    /// The column's shape (ring, bar or text) and look (dots, solid, glass or stripes). A cell whose
+    /// Tag is "shape:look" (Settings' tiles) keeps those; "*" takes the setting, and a tile showing a
+    /// look while the column shows text shows it as a bar.
+    /// </summary>
+    private (string Shape, string Look) Spec
+    {
+        get
+        {
+            var shape = ViewSettings.Current.ColumnProgress;
+            var look = ViewSettings.Current.ColumnLook;
+            if (Tag is string tag && tag.Split(':') is [var s, var l])
+            {
+                shape = s != "*" ? s : shape == "text" ? "bar" : shape;
+                if (l != "*") look = l;
+            }
+            return (shape, look);
+        }
+    }
 
     private void Resume()
     {
@@ -172,17 +189,17 @@ public sealed partial class ProgressCell : Grid
 
     private void Paint()
     {
-        var style = RowStyle;
-        var ring = style == "ring";
-        var bar = style == "bar";
+        var (shape, look) = Spec;
+        var ring = shape == "ring";
+        var bar = shape == "bar";
         var item = _item;
         _words.Visibility = !ring && !bar ? Visibility.Visible : Visibility.Collapsed;
         _ringRow.Visibility = ring ? Visibility.Visible : Visibility.Collapsed;
         _barStack.Visibility = bar ? Visibility.Visible : Visibility.Collapsed;
         if (item is null) { StopMotion(); return; }
 
-        if (ring) PaintRing(item);
-        else if (bar) PaintBar(item);
+        if (ring) PaintRing(item, look);
+        else if (bar) PaintBar(item, look);
         else
         {
             StopMotion();
@@ -207,7 +224,7 @@ public sealed partial class ProgressCell : Grid
         return item.IsActive ? null : 0;
     }
 
-    private void PaintRing(DownloadItem item)
+    private void PaintRing(DownloadItem item, string look)
     {
         // A small ring, the size of an icon; the words beside it carry the number.
         var size = ViewSettings.Current.Density switch { "compact" => 14.0, "comfortable" => 18.0, _ => 16.0 };
@@ -219,7 +236,27 @@ public sealed partial class ProgressCell : Grid
         _ring.Width = _ring.Height = size;
         _track.StrokeThickness = _arc.StrokeThickness = thickness;
         _track.Stroke = new SolidColorBrush(Alpha(Ink, ThemeColors.IsDark ? 0.18 : 0.13));
-        _arc.Stroke = new SolidColorBrush(Alpha(color, 0.45 + 0.55 * k));
+        var strong = Alpha(color, 0.45 + 0.55 * k);
+        // The look on a ring: glass shades it top to bottom, stripes cut it into segments, dots into dots.
+        _arc.Stroke = look == "glass"
+            ? new LinearGradientBrush
+            {
+                StartPoint = new Windows.Foundation.Point(0, 0),
+                EndPoint = new Windows.Foundation.Point(0, 1),
+                GradientStops = { new GradientStop { Color = strong, Offset = 0 }, new GradientStop { Color = Alpha(color, 0.4 * k), Offset = 1 } },
+            }
+            : new SolidColorBrush(strong);
+        foreach (var shape in new Shape[] { _track, _arc })
+        {
+            shape.StrokeDashArray = look switch
+            {
+                "dots" => new DoubleCollection { 0, 1.8 },
+                "stripes" => new DoubleCollection { 1.1, 0.6 },
+                _ => null,
+            };
+            shape.StrokeDashCap = look == "stripes" ? PenLineCap.Flat : PenLineCap.Round;
+            shape.StrokeStartLineCap = shape.StrokeEndLineCap = look == "stripes" ? PenLineCap.Flat : PenLineCap.Round;
+        }
         _ringText.Text = "";
         _ringGlyph.Visibility = Visibility.Collapsed;
 
@@ -266,7 +303,7 @@ public sealed partial class ProgressCell : Grid
         return geometry;
     }
 
-    private void PaintBar(DownloadItem item)
+    private void PaintBar(DownloadItem item, string look)
     {
         var k = Strength;
         var color = ColorOf(item);
@@ -282,8 +319,9 @@ public sealed partial class ProgressCell : Grid
         _bar.Visibility = hasBar ? Visibility.Visible : Visibility.Collapsed;
         _bar.Height = height;
         _bar.CornerRadius = _barFill.CornerRadius = new CornerRadius(height / 2);
-        _bar.Background = new SolidColorBrush(Alpha(Ink, ThemeColors.IsDark ? 0.14 : 0.09));
-        _barFill.Background = new SolidColorBrush(Alpha(color, 0.45 + 0.55 * k));
+        var scale = XamlRoot?.RasterizationScale ?? 1;
+        _bar.Background = new SolidColorBrush(Alpha(Ink, ThemeColors.IsDark ? 0.10 : 0.06));
+        _barFill.Background = RowFill.LineBrush(look, color, k, (int)height, scale);
         if (!hasBar) { StopMotion(); return; }
 
         var width = _bar.ActualWidth;

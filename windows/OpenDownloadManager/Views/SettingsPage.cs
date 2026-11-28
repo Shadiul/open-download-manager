@@ -62,7 +62,10 @@ public sealed partial class SettingsPage : UserControl
     private readonly ComboBox _colorBy = new() { Items = { "Download status", "File type" }, MinWidth = 180 };
     private readonly ComboBox _density = new() { Items = { "Compact", "Standard", "Comfortable" }, MinWidth = 180 };
     private readonly GridView _swatches = Picker("Accent colour", followFocus: false);
-    private readonly GridView _styleTiles = Picker("Row progress", followFocus: true);
+    private readonly GridView _rowShape = Picker("Across the row", followFocus: true);
+    private readonly GridView _rowLook = Picker("Row look", followFocus: true);
+    private readonly GridView _columnShape = Picker("In the Progress column", followFocus: true);
+    private readonly GridView _columnLook = Picker("Column look", followFocus: true);
 
     // System
     private readonly ToggleSwitch _startWithWindows = Switch();
@@ -75,28 +78,28 @@ public sealed partial class SettingsPage : UserControl
     private readonly List<(SelectorBarItem Item, FrameworkElement Anchor)> _anchors = [];
     private bool _jumping;
 
-    private static readonly (string Value, string Label)[] RowStyles =
+    // Progress is shown in two places, each with its own shape and look: across the row (RowFill)
+    // and in the Progress column (ProgressCell).
+    private static readonly (string Value, string Label, string Hint)[] RowShapes =
     [
-        ("dots", "Dot matrix"),
-        ("solid", "Solid"),
-        ("glass", "Glass"),
-        ("stripes", "Stripes"),
-        ("underline", "Underline"),
-        ("none", "Text only"),
-        ("ring", "Ring"),
-        ("bar", "Column bar"),
+        ("bar", "Bar", "The whole row fills as the download goes."),
+        ("underline", "Underline", "A thin line along the bottom of the row."),
+        ("none", "Off", "Nothing behind the row."),
     ];
 
-    private static readonly string[] RowStyleHints =
+    private static readonly (string Value, string Label, string Hint)[] ColumnShapes =
     [
-        "Lit dots across the row, like an LED panel.",
-        "A flat tint across the row.",
-        "A tint that fades from top to bottom.",
-        "Diagonal stripes across the row.",
-        "A thin line along the bottom of the row.",
-        "The percentage only.",
-        "A small circle in the Progress column that fills as it goes, with the percentage beside it.",
-        "A thin bar in the Progress column, under the percentage.",
+        ("ring", "Ring", "A small circle that fills as it goes, the percentage beside it."),
+        ("bar", "Bar", "A thin bar under the percentage."),
+        ("text", "Text only", "The percentage or the state, in words."),
+    ];
+
+    private static readonly (string Value, string Label, string Hint)[] Looks =
+    [
+        ("dots", "Dot matrix", "Lit dots, like an LED panel."),
+        ("solid", "Solid", "One flat colour."),
+        ("glass", "Glass", "Colour that fades from top to bottom."),
+        ("stripes", "Stripes", "Diagonal stripes, or a ring in segments."),
     ];
 
     public SettingsPage(CoreClient core, AppSettings app, IntPtr hwnd)
@@ -171,7 +174,8 @@ public sealed partial class SettingsPage : UserControl
         page.Children.Add(Card("\uE793", "Theme", null, _theme));
         page.Children.Add(Card("\uE790", "Accent colour", "For buttons, switches, selection and the rows.", null, extra: _swatches));
         page.Children.Add(Card("\uE7F4", "Window material", "Mica takes on the desktop's colours; Acrylic shows it through, blurred.", _backdrop));
-        page.Children.Add(Card("\uE9D9", "Row progress", "How each download shows its progress: across its row, or in the Progress column.", null, extra: _styleTiles));
+        page.Children.Add(Card("\uE9D9", "Progress across the row", "Each download's row fills as it goes.", null, extra: PickerPair(_rowShape, _rowLook)));
+        page.Children.Add(Card("\uF16A", "Progress in the Progress column", "A ring or a bar beside the percentage.", null, extra: PickerPair(_columnShape, _columnLook)));
         page.Children.Add(Card("\uE945", "Animation", "A band of light that moves along downloading rows.", _animation));
         page.Children.Add(Card("\uE706", "Fill strength", "How strongly rows are tinted.", _strength));
         page.Children.Add(Card("\uE8EC", "Colour rows by", "File type gives video, music, documents, programs and archives each a colour.", _colorBy));
@@ -230,15 +234,15 @@ public sealed partial class SettingsPage : UserControl
 
         Load();
         BuildSwatches();
-        BuildStyleTiles();
+        BuildProgressPickers();
         SyncSwatches();
-        SyncStyleTiles();
+        SyncProgressPickers();
         Wire();
         _loading = false;
 
         // Accent or style changed elsewhere (or Windows' accent): move the selection to match.
         Listen(true);
-        Loaded += (_, _) => { Listen(true); SyncSwatches(); SyncStyleTiles(); };
+        Loaded += (_, _) => { Listen(true); SyncSwatches(); SyncProgressPickers(); };
         Unloaded += (_, _) => Listen(false);
 
         AfterDownload.QueueActionChanged += OnQueueActionChanged;
@@ -573,21 +577,52 @@ public sealed partial class SettingsPage : UserControl
         _syncing = false;
     }
 
-    /// <summary>One tile per row style, each a small live row in that style.</summary>
-    private void BuildStyleTiles()
+    /// <summary>The shape tiles, then "Look" and the look tiles.</summary>
+    private static StackPanel PickerPair(GridView shape, GridView look) => new()
     {
-        for (var i = 0; i < RowStyles.Length; i++)
+        Spacing = 4,
+        Children =
         {
-            var (value, label) = RowStyles[i];
-            var item = Sample(910000 + (ulong)i, "sample.iso", "downloading", 0.62, 100_000_000, 5_000_000);
-            var sample = new Grid { Height = 34, DataContext = item };
-            if (value is "ring" or "bar")
-                sample.Children.Add(new ProgressCell { Tag = value, HorizontalAlignment = value == "bar" ? HorizontalAlignment.Stretch : HorizontalAlignment.Left });
-            else
-            {
-                sample.Children.Add(FillGrid(item, value));
-                sample.Children.Add(new TextBlock { Text = "62%", FontSize = 12, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-            }
+            shape,
+            new TextBlock { Text = "Look", Style = ThemedStyles.Text(caption: true, secondary: true), Margin = new Thickness(0, 6, 0, 2) },
+            look,
+        },
+    };
+
+    private static DownloadItem TileSample(int i) => Sample(910000 + (ulong)i, "sample.iso", "downloading", 0.62, 100_000_000, 5_000_000);
+
+    /// <summary>A small live row in the shape and look a Tag names, with its percentage over it.</summary>
+    private static FrameworkElement RowSample(string tag, int i)
+    {
+        var item = TileSample(i);
+        var sample = new Grid { Height = 34, DataContext = item };
+        sample.Children.Add(FillGrid(item, tag));
+        sample.Children.Add(new TextBlock { Text = "62%", FontSize = 12, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+        return sample;
+    }
+
+    /// <summary>A Progress column cell in the shape and look a Tag names.</summary>
+    private static FrameworkElement ColumnSample(string tag, int i) => new Grid
+    {
+        Height = 34,
+        DataContext = TileSample(i),
+        Children = { new ProgressCell { Tag = tag, HorizontalAlignment = HorizontalAlignment.Stretch } },
+    };
+
+    private void BuildProgressPickers()
+    {
+        var v = ViewSettings.Current;
+        // Shape tiles show the chosen look; look tiles show the chosen shape ("*" in the Tag).
+        Fill(_rowShape, RowShapes, x => RowSample(x + ":*", 0), x => v.RowProgress = x, 3);
+        Fill(_rowLook, Looks, x => RowSample("*:" + x, 1), x => v.RowLook = x, 4);
+        Fill(_columnShape, ColumnShapes, x => ColumnSample(x + ":*", 2), x => v.ColumnProgress = x, 3);
+        Fill(_columnLook, Looks, x => ColumnSample("*:" + x, 3), x => v.ColumnLook = x, 4);
+    }
+
+    private void Fill(GridView view, (string Value, string Label, string Hint)[] items, Func<string, FrameworkElement> sample, Action<string> choose, int columns)
+    {
+        foreach (var (value, label, hint) in items)
+        {
             var tile = new GridViewItem
             {
                 Tag = value,
@@ -598,45 +633,50 @@ public sealed partial class SettingsPage : UserControl
                 Content = new StackPanel
                 {
                     Spacing = 8,
-                    Children = { sample, new TextBlock { Text = label, Style = ThemedStyles.Text(caption: true, secondary: false) } },
+                    Children = { sample(value), new TextBlock { Text = label, Style = ThemedStyles.Text(caption: true, secondary: false) } },
                 },
             };
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tile, label);
-            ToolTipService.SetToolTip(tile, RowStyleHints[i]);
-            _styleTiles.Items.Add(tile);
+            ToolTipService.SetToolTip(tile, hint);
+            view.Items.Add(tile);
         }
-        _styleTiles.SelectionChanged += (_, _) =>
+        view.SelectionChanged += (_, _) =>
         {
             if (_syncing) return;
-            if (_styleTiles.SelectedItem is GridViewItem { Tag: string value }) ViewSettings.Current.ProgressStyle = value;
-            else DispatcherQueue.TryEnqueue(SyncStyleTiles);
+            if (view.SelectedItem is GridViewItem { Tag: string value }) choose(value);
+            else DispatcherQueue.TryEnqueue(SyncProgressPickers);
         };
-        // Equal columns that fill the card: four across, two when narrow.
-        _styleTiles.SizeChanged += (_, e) => SizeTiles(e.NewSize.Width);
-        _styleTiles.Loaded += (_, _) => SizeTiles(_styleTiles.ActualWidth);
+        // Equal columns that fill the card; half as many when narrow.
+        void Size(double width)
+        {
+            if (width <= 0 || view.ItemsPanelRoot is not ItemsWrapGrid panel) return;
+            var w = Math.Floor(width / (width >= 640 ? columns : Math.Max(2, columns / 2)));
+            if (double.IsNaN(panel.ItemWidth) || Math.Abs(panel.ItemWidth - w) >= 1) panel.ItemWidth = w;
+        }
+        view.SizeChanged += (_, e) => Size(e.NewSize.Width);
+        view.Loaded += (_, _) => Size(view.ActualWidth);
     }
 
-    private void SizeTiles(double width)
+    private void SyncProgressPickers()
     {
-        if (width <= 0 || _styleTiles.ItemsPanelRoot is not ItemsWrapGrid panel) return;
-        var columns = width >= 640 ? 4 : 2;
-        var w = Math.Floor(width / columns);
-        if (double.IsNaN(panel.ItemWidth) || Math.Abs(panel.ItemWidth - w) >= 1) panel.ItemWidth = w;
-    }
-
-    private void SyncStyleTiles()
-    {
-        var current = ViewSettings.Current.ProgressStyle;
-        var tiles = _styleTiles.Items.OfType<GridViewItem>().ToList();
+        var v = ViewSettings.Current;
         _syncing = true;
-        _styleTiles.SelectedItem = tiles.FirstOrDefault(t => (string)t.Tag == current) ?? tiles[0];
+        foreach (var (view, value) in new[] { (_rowShape, v.RowProgress), (_rowLook, v.RowLook), (_columnShape, v.ColumnProgress), (_columnLook, v.ColumnLook) })
+        {
+            var tiles = view.Items.OfType<GridViewItem>().ToList();
+            view.SelectedItem = tiles.FirstOrDefault(t => (string)t.Tag == value) ?? tiles[0];
+        }
         _syncing = false;
+        // A look only matters while its place shows progress.
+        _rowLook.IsEnabled = v.RowProgress != "none";
+        _columnLook.IsEnabled = v.ColumnProgress != "text";
     }
 
     private void OnViewSettingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ViewSettings.Accent)) SyncSwatches();
-        else if (e.PropertyName == nameof(ViewSettings.ProgressStyle)) SyncStyleTiles();
+        else if (e.PropertyName is nameof(ViewSettings.RowProgress) or nameof(ViewSettings.RowLook)
+            or nameof(ViewSettings.ColumnProgress) or nameof(ViewSettings.ColumnLook)) SyncProgressPickers();
     }
 
     private void Listen(bool on)
