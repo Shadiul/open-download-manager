@@ -80,6 +80,7 @@ public sealed partial class ViewSettings : ObservableObject
         AppPaths.AppIcon = value;
         Save(s => s.AppIcon = value);
         foreach (var w in LiveWindows()) w.AppWindow.SetIcon(AppPaths.IconPath);
+        ThemeColors.RaiseIconChanged();
         AppShortcuts.Sync();
     }
 

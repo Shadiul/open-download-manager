@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 namespace OpenDownloadManager.Services;
 
@@ -72,11 +72,12 @@ public static class AppPaths
         Path.Combine(AppDir, "Assets", icon == "smoke" ? $"app-smoke.{extension}" : $"app.{extension}");
 
     /// <summary>
-    /// The one-colour tray icon: a dark glyph for a light taskbar, a white one for a dark taskbar,
-    /// purple ones in a development copy.
+    /// The one-colour glyph of the chosen icon, for the tray and the tool windows' title bars: a dark
+    /// glyph for a light taskbar, a white one for a dark taskbar. A development copy's is the Smoke
+    /// glyph in purple, whichever icon is chosen.
     /// </summary>
     public static string TrayIconPath(bool lightTaskbar) =>
-        Path.Combine(AppDir, "Assets", $"tray{(IsDev ? "-dev" : "")}-{(lightTaskbar ? "light" : "dark")}.ico");
+        Path.Combine(AppDir, "Assets", $"tray{(IsDev ? "-dev" : AppIcon == "smoke" ? "-smoke" : "")}-{(lightTaskbar ? "light" : "dark")}.ico");
 
     /// <summary>The user's Downloads folder, wherever they moved it.</summary>
     public static string DownloadsDir { get; } = Profile is null ? KnownDownloads() : Path.Combine(DataDir, "Downloads");
