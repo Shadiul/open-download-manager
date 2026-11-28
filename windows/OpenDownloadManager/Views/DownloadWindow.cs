@@ -41,7 +41,7 @@ public sealed class DownloadWindow : Window
     // In place of the graph: while the file is put together, and once it is done.
     private readonly Border _finishingPanel, _donePanel;
     private readonly TextBlock _finishingText = Text(secondary: true);
-    private readonly TextBlock _doneSummary = Text(caption: true, secondary: true);
+    private readonly TextBlock _doneSize = StatValue(), _doneTime = StatValue(), _doneSpeed = StatValue();
     private readonly Border _doneBadge;
     private bool _doneShown;
     private readonly TextBlock _speedLabel = Text(caption: true);
@@ -88,13 +88,28 @@ public sealed class DownloadWindow : Window
         SystemBackdrop = new MicaBackdrop();
 
         // ----- header: route, then "54% complete" with pause and cancel -----
-        var headline = new Grid { ColumnSpacing = 4 };
+        // Once done, a check badge leads the headline, on the same left edge as everything below.
+        _doneBadge = new Border
+        {
+            Width = 28,
+            Height = 28,
+            CornerRadius = new CornerRadius(14),
+            Margin = new Thickness(0, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+            Background = ThemeColors.Brush(() => ThemeColors.Success, "success"),
+            Child = new FontIcon { Glyph = "\uE73E", FontSize = 14, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) },
+        };
+        var headline = new Grid { ColumnSpacing = 4, MinHeight = 34 };
+        headline.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         headline.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         headline.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         headline.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        headline.Children.Add(_doneBadge);
+        Grid.SetColumn(_headline, 1);
         headline.Children.Add(_headline);
-        Grid.SetColumn(_pause, 1);
-        Grid.SetColumn(_cancel, 2);
+        Grid.SetColumn(_pause, 2);
+        Grid.SetColumn(_cancel, 3);
         headline.Children.Add(_pause);
         headline.Children.Add(_cancel);
 
@@ -123,37 +138,28 @@ public sealed class DownloadWindow : Window
                 Children = { new ProgressRing { IsActive = true, Width = 22, Height = 22 }, _finishingText },
             },
         };
-        _doneBadge = new Border
+        // In place of the graph once done: three figures side by side, each label over its value.
+        var stats = new Grid();
+        for (var c = 0; c < 3; c++) stats.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var tiles = new[] { ("Size", _doneSize), ("Time taken", _doneTime), ("Average speed", _doneSpeed) };
+        for (var c = 0; c < tiles.Length; c++)
         {
-            Width = 44,
-            Height = 44,
-            CornerRadius = new CornerRadius(22),
-            Background = ThemeColors.Brush(() => ThemeColors.Success, "success"),
-            Child = new FontIcon { Glyph = "\uE73E", FontSize = 22, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) },
-        };
+            var tile = new StackPanel { Spacing = 2, Padding = new Thickness(16, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
+            tile.Children.Add(Text(caption: true, secondary: true, text: tiles[c].Item1));
+            tile.Children.Add(tiles[c].Item2);
+            var cell = new Border { Child = tile };
+            if (c > 0) { cell.BorderThickness = new Thickness(1, 0, 0, 0); cell.Style = DividerStyle; }
+            Grid.SetColumn(cell, c);
+            stats.Children.Add(cell);
+        }
         _donePanel = new Border
         {
-            Height = 92,
+            Height = 72,
             BorderThickness = new Thickness(1),
+            Padding = new Thickness(0, 12, 0, 12),
             Style = CardStyle,
             Visibility = Visibility.Collapsed,
-            Child = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 16,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Children =
-                {
-                    _doneBadge,
-                    new StackPanel
-                    {
-                        VerticalAlignment = VerticalAlignment.Center,
-                        Spacing = 2,
-                        Children = { new TextBlock { Text = "Ready to open", Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] }, _doneSummary },
-                    },
-                },
-            },
+            Child = stats,
         };
         _speedLabel.HorizontalAlignment = HorizontalAlignment.Right;
 
@@ -261,6 +267,15 @@ public sealed class DownloadWindow : Window
     private static Style MapStyle => ThemedStyles.Get("Border", null, ("Background", "ControlStrokeColorDefaultBrush"));
     private static Style GridLineStyle => ThemedStyles.Get("Line", null, ("Stroke", "DividerStrokeColorDefaultBrush"));
     private static Style SpeedLineStyle => ThemedStyles.Get("Line", null, ("Stroke", "TextFillColorSecondaryBrush"));
+    private static Style DividerStyle => ThemedStyles.Get("Border", null, ("BorderBrush", "DividerStrokeColorDefaultBrush"));
+
+    private static TextBlock StatValue() => new()
+    {
+        FontSize = 16,
+        FontWeight = FontWeights.SemiBold,
+        TextTrimming = TextTrimming.CharacterEllipsis,
+        TextWrapping = TextWrapping.NoWrap,
+    };
 
     private static TextBlock Text(bool caption = false, bool secondary = false, string text = "") => new()
     {
@@ -335,17 +350,22 @@ public sealed class DownloadWindow : Window
 
         _values["Name:"].Text = i.DisplayName;
         ToolTipService.SetToolTip(_values["Name:"], i.DisplayName);
-        _values["Time remaining:"].Text = done ? "None" : i.IsFailed ? "—" : i.TimeLeftText is { Length: > 0 } t ? $"About {t}" : "Calculating…";
-        _values["Size remaining:"].Text = i.TotalSize is > 0
+        _values["Time remaining:"].Text = done ? (i.SaveDir ?? "") : i.IsFailed ? "—" : i.TimeLeftText is { Length: > 0 } t ? $"About {t}" : "Calculating…";
+        _values["Size remaining:"].Text = done ? host
+            : i.TotalSize is > 0
             ? $"{Format.Bytes(Math.Max(0, i.TotalSize.Value - i.Downloaded))} ({Format.Bytes(i.TotalSize.Value)})"
             : i.Downloaded > 0 ? $"Unknown ({Format.Bytes(i.Downloaded)} so far)" : "Unknown";
-        // A failed download shows what went wrong where the time would be.
+        _labels["Size remaining:"].Text = done ? "From:" : "Size remaining:";
+        ToolTipService.SetToolTip(_values["Size remaining:"], done ? i.Url : null);
+        // A failed download shows what went wrong where the time would be; a finished one, its folder.
         var failed = i.IsFailed && i.Error is not null;
-        _labels["Time remaining:"].Text = failed ? "Problem:" : "Time remaining:";
+        _labels["Time remaining:"].Text = failed ? "Problem:" : done ? "Saved to:" : "Time remaining:";
         if (failed) _values["Time remaining:"].Foreground = i.StatusBrush;
         else _values["Time remaining:"].ClearValue(TextBlock.ForegroundProperty);
         if (failed) _values["Time remaining:"].Text = i.Error!;
-        ToolTipService.SetToolTip(_values["Time remaining:"], failed ? i.Error : null);
+        ToolTipService.SetToolTip(_values["Time remaining:"], failed ? i.Error : done ? i.FilePath : null);
+        // Done, the route line would only repeat the rows below.
+        _route.Visibility = done ? Visibility.Collapsed : Visibility.Visible;
 
         _pause.Visibility = done || i.IsFinishing ? Visibility.Collapsed : Visibility.Visible;
 
@@ -369,7 +389,8 @@ public sealed class DownloadWindow : Window
         _buttons.Children.Add(_close);
         _close.Content = done ? "Close" : "Hide";
         ToolTipService.SetToolTip(_close, done ? null : "Close this window; the download carries on");
-        _detailsToggle.Visibility = i.Kind == "video" ? Visibility.Collapsed : Visibility.Visible;
+        _detailsToggle.Visibility = i.Kind == "video" || done ? Visibility.Collapsed : Visibility.Visible;
+        if (done && _expanded) SetExpanded(false);
 
         // The graph eases toward these on its own timer.
         if (done) _targetProgress = 1;
@@ -395,20 +416,18 @@ public sealed class DownloadWindow : Window
     {
         var i = _item;
         var size = i.TotalSize ?? i.Downloaded;
-        var parts = new List<string>();
-        if (size > 0) parts.Add(Format.Bytes(size));
-        if (i.CreatedAt > 0 && i.FinishedAt > i.CreatedAt)
-            parts.Add("in " + Format.Duration((i.FinishedAt - i.CreatedAt) / 1000.0));
+        _doneSize.Text = size > 0 ? Format.Bytes(size) : "—";
+        _doneTime.Text = i.CreatedAt > 0 && i.FinishedAt > i.CreatedAt ? Format.Duration((i.FinishedAt - i.CreatedAt) / 1000.0) : "—";
         var history = SpeedHistory.Get(i.Id);
-        if (history.Count > 0) parts.Add($"average {Format.Speed((long)history.Average(h => h.Speed))}");
-        _doneSummary.Text = string.Join(" · ", parts);
+        _doneSpeed.Text = history.Count > 0 ? Format.Speed((long)history.Average(h => h.Speed)) : "—";
         _donePanel.Visibility = Visibility.Visible;
+        _doneBadge.Visibility = Visibility.Visible;
         if (_doneShown) return;
         _doneShown = true;
         // The badge grows from small with a little overshoot, and the panel fades in.
         var badge = ElementCompositionPreview.GetElementVisual(_doneBadge);
         var compositor = badge.Compositor;
-        badge.CenterPoint = new System.Numerics.Vector3(22, 22, 0);
+        badge.CenterPoint = new System.Numerics.Vector3(14, 14, 0);
         var grow = compositor.CreateSpringVector3Animation();
         grow.InitialValue = new System.Numerics.Vector3(0.4f, 0.4f, 1);
         grow.FinalValue = new System.Numerics.Vector3(1, 1, 1);

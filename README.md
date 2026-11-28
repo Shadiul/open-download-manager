@@ -20,7 +20,12 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/app-light.png" alt="The download list, with rows that fill as each download progresses" width="900">
+  <a href="docs/media/demo.mp4">
+    <img src="docs/media/demo.gif" alt="A download handed over from the browser: the new-download window, the progress window with its speed graph, and the completion screen, while other downloads fill their rows in the list" width="900">
+  </a>
+  <br>
+  <sub>A browser download arriving, its progress window, and the completion screen (the middle is sped up 3×).
+  <a href="docs/media/demo.mp4">Watch in full quality</a>.</sub>
 </p>
 
 Fast segmented downloads, pause and resume that survive a restart, a queue with a schedule, and
@@ -49,20 +54,40 @@ have the right to download: it does not get around DRM, paywalls, or logins you 
 
 **Made for Windows 11**
 
-- Light and dark themes, Mica, three row densities, columns you choose, filters and search.
+- Light and dark themes, Mica, three row densities, columns you choose, filters, and search in the
+  title bar (Ctrl+F).
 - A progress window per download, after the Windows file-copy dialog: a live speed graph and each
-  connection's part of the file.
+  connection's part of the file, then a summary when it is done.
+- A new-download window for browser downloads: the download starts at once while you choose the name
+  and folder, and the change applies when it finishes.
+- Download again, rename or move finished files, and a separate "finishing" state while a file is
+  saved or a video's picture and sound are merged.
 - Sorts files into Video, Music, Documents, Programs, Archives and Other folders.
 - Marks finished files as downloaded from the internet (Mark of the Web), so Windows and your
   antivirus check them like browser downloads.
 - Notifications, keeps the PC awake while downloading, starts with Windows, and offers to download
   links you copy.
 
+## Screenshots
+
 <p align="center">
-  <img src="docs/screenshots/app-dark.png" alt="The download list in dark theme" width="760">
+  <img src="docs/screenshots/app-light.png" alt="The download list in light theme, with rows that fill as each download progresses" width="820">
 </p>
 <p align="center">
-  <img src="docs/screenshots/progress-window.png" alt="A download's progress window: its speed graph and each connection's part of the file" width="420">
+  <img src="docs/screenshots/app-dark.png" alt="The download list in dark theme" width="820">
+</p>
+<p align="center">
+  <img src="docs/screenshots/new-download.png" alt="The new-download window for a browser download, already downloading while it asks for the name and folder" width="440">
+  &nbsp;
+  <img src="docs/screenshots/progress-window.png" alt="A download's progress window with its speed graph" width="380">
+</p>
+<p align="center">
+  <img src="docs/screenshots/progress-details-dark.png" alt="The progress window in dark theme with details open: each connection's share of the file" width="380">
+  &nbsp;
+  <img src="docs/screenshots/download-complete.png" alt="The completion screen: size, time taken and average speed" width="380">
+</p>
+<p align="center">
+  <img src="docs/screenshots/settings-dark.png" alt="Settings: download folder, category folders, connections, parallel downloads, speed limit and schedule" width="820">
 </p>
 
 ## Browser extension
