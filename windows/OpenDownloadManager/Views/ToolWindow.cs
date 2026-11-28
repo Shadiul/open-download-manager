@@ -35,13 +35,24 @@ public abstract class ToolWindow : Window
         // The title bar: glyph and title over the window's own content; Windows keeps the caption buttons.
         if (Content is UIElement body)
         {
+            // Windows 11's layout: glyph 16 px in from the left, the title 16 px after it, both centred
+            // in the caption buttons' height (set once the scale is known).
             var bar = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                Spacing = 10,
+                Spacing = 16,
                 Height = 32,
-                Padding = new Thickness(12, 0, 0, 0),
-                Children = { _glyph, new TextBlock { Text = Title, FontSize = 12, VerticalAlignment = VerticalAlignment.Center } },
+                Padding = new Thickness(16, 0, 0, 0),
+                Children =
+                {
+                    _glyph,
+                    new TextBlock { Text = Title, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], VerticalAlignment = VerticalAlignment.Center },
+                },
+            };
+            bar.Loaded += (_, _) =>
+            {
+                var h = AppWindow.TitleBar.Height;
+                if (h > 0 && bar.XamlRoot is { } xr) bar.Height = h / xr.RasterizationScale;
             };
             var frame = new Grid { RowDefinitions = { new RowDefinition { Height = GridLength.Auto }, new RowDefinition() } };
             Content = null;
@@ -57,7 +68,14 @@ public abstract class ToolWindow : Window
         }
         ViewSettings.Current.Track(this);
         Appearance.Track(this);
-        if (Content is FrameworkElement root) root.Loaded += (_, _) => { FitHeight(); CenterOnScreen(); };
+        // Fit once laid out: the first pass sizes the window, the second (after layout) knows how much
+        // of it the title bar covers.
+        if (Content is FrameworkElement root) root.Loaded += (_, _) =>
+        {
+            FitHeight();
+            CenterOnScreen();
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => { FitHeight(); CenterOnScreen(); });
+        };
         CenterOnScreen();
     }
 
@@ -72,9 +90,18 @@ public abstract class ToolWindow : Window
         var width = AppWindow.ClientSize.Width / scale;
         root.Measure(new Windows.Foundation.Size(width, double.PositiveInfinity));
         var height = (int)Math.Ceiling(root.DesiredSize.Height * scale);
+        // With the content drawn under the title bar, Windows still adds the hidden caption to the
+        // height ResizeClient is given. Learn that from the last resize and ask for that much less,
+        // so the content ends at the window's bottom edge.
+        if (_asked > 0 && AppWindow.ClientSize.Height != _asked) _extra = AppWindow.ClientSize.Height - _asked;
         if (height > 0 && height != AppWindow.ClientSize.Height)
-            AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(AppWindow.ClientSize.Width, height));
+        {
+            _asked = height - _extra;
+            AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(AppWindow.ClientSize.Width, _asked));
+        }
     }
+
+    private int _asked, _extra;
 
     private void CenterOnScreen()
     {
