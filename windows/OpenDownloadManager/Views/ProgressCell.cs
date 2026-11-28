@@ -17,7 +17,7 @@ namespace OpenDownloadManager.Views;
 /// this cell only says it in words: a state glyph and "36%", "Paused 36%", "Done". Two styles draw
 /// it here instead:
 /// <list type="bullet">
-/// <item><b>ring</b>: a small circle that fills clockwise, the percentage inside; a check when done,
+/// <item><b>ring</b>: a small circle that fills clockwise, with the percentage or state beside it;
 /// a spinning arc while the size is unknown.</item>
 /// <item><b>bar</b>: a thin bar across the column under the progress text.</item>
 /// </list>
@@ -34,7 +34,7 @@ public sealed partial class ProgressCell : Grid
     private readonly TextBlock _text = Cell();
 
     // Ring.
-    private readonly StackPanel _ringRow = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 8, 0) };
+    private readonly StackPanel _ringRow = new() { Orientation = Orientation.Horizontal, Spacing = 7, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 8, 0) };
     private readonly Grid _ring = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly Ellipse _track = new();
     private readonly Microsoft.UI.Xaml.Shapes.Path _arc = new() { StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
@@ -209,48 +209,23 @@ public sealed partial class ProgressCell : Grid
 
     private void PaintRing(DownloadItem item)
     {
-        var size = ViewSettings.Current.Density switch { "compact" => 24.0, "comfortable" => 36.0, _ => 30.0 };
+        // A small ring, the size of an icon; the words beside it carry the number.
+        var size = ViewSettings.Current.Density switch { "compact" => 14.0, "comfortable" => 18.0, _ => 16.0 };
         var k = Strength;
-        var thickness = size / 12 * (k < 1 ? 0.8 : k > 1 ? 1.3 : 1);
+        var thickness = size / 8 * (k < 1 ? 0.8 : k > 1 ? 1.25 : 1);
         var color = ColorOf(item);
         var fraction = Fraction(item);
-        var known = item.TotalSize is > 0;
 
         _ring.Width = _ring.Height = size;
         _track.StrokeThickness = _arc.StrokeThickness = thickness;
-        _track.Stroke = new SolidColorBrush(Alpha(Ink, ThemeColors.IsDark ? 0.16 : 0.11));
+        _track.Stroke = new SolidColorBrush(Alpha(Ink, ThemeColors.IsDark ? 0.18 : 0.13));
         _arc.Stroke = new SolidColorBrush(Alpha(color, 0.45 + 0.55 * k));
+        _ringText.Text = "";
+        _ringGlyph.Visibility = Visibility.Collapsed;
 
-        // Inside: the percentage while it has one, a glyph when it says more than a number.
-        var inside = item.State switch
-        {
-            "completed" => "",
-            "failed" => "",
-            "queued" => "",
-            "paused" when item.AwaitingConfirmation => "",
-            "paused" when !known || item.Downloaded <= 0 => "",
-            _ => null,
-        };
-        var percent = inside is null && known && item.State != "finishing" ? $"{Math.Floor(item.Progress):0}" : "";
-        _ringText.Text = percent.Length > 0 ? percent + "%" : "";
-        _ringText.FontSize = size switch { <= 24 => 7.5, >= 36 => 10, _ => 9 };
-        _ringText.Foreground = new SolidColorBrush(Alpha(Ink, 0.9));
-        _ringGlyph.Glyph = inside ?? "";
-        _ringGlyph.FontSize = size * 0.38;
-        _ringGlyph.Foreground = new SolidColorBrush(color);
-        _ringGlyph.Visibility = inside is null ? Visibility.Collapsed : Visibility.Visible;
-
-        // Next to it: what the number does not say.
-        _ringLabel.Text = item.State switch
-        {
-            "downloading" when known => "",
-            "downloading" or "waitingToRetry" when !known => item.BarText,
-            "finishing" => "Finishing…",
-            "paused" when !item.AwaitingConfirmation => "Paused",
-            _ => item.ProgressText,
-        };
+        // Beside it: "62%", "Paused 62%", "12.3 MB" while the size is unknown, "Done", "Failed"...
+        _ringLabel.Text = item.ProgressText;
         _ringLabel.Foreground = item.StatusBrush;
-        _ringLabel.FontSize = 13;
         _ringLabel.Visibility = _ringLabel.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         if (fraction is null)

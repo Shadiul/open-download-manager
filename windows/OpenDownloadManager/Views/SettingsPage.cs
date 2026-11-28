@@ -95,7 +95,7 @@ public sealed partial class SettingsPage : UserControl
         "Diagonal stripes across the row.",
         "A thin line along the bottom of the row.",
         "The percentage only.",
-        "A small circle in the Progress column that fills as it goes, with the percentage inside.",
+        "A small circle in the Progress column that fills as it goes, with the percentage beside it.",
         "A thin bar in the Progress column, under the percentage.",
     ];
 
