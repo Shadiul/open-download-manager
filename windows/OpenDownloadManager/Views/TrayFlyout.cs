@@ -169,6 +169,12 @@ public sealed class TrayFlyout : Window
         AfterDownload.QueueActionChanged += value => DispatcherQueue.TryEnqueue(() => ShowQueueAction(value));
         var settings = IconButton("", "Settings", () => { Close(); App.Current?.ShowSettings(); });
         var open = IconButton("", "Open Open Download Manager", () => { Close(); App.Current?.ShowWindow(); });
+        // The app's own one-colour glyph (the tray icon), dark on the light flyout and white on the dark one.
+        var openGlyph = new Microsoft.UI.Xaml.Controls.Image { Width = 16, Height = 16 };
+        void ShowOpenGlyph() => openGlyph.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(AppPaths.TrayIconPath(lightTaskbar: !ThemeColors.IsDark))) { DecodePixelWidth = 32 };
+        ShowOpenGlyph();
+        ThemeColors.Changed += ShowOpenGlyph;
+        open.Content = openGlyph;
         Grid.SetColumn(_whenDone, 1);
         Grid.SetColumn(settings, 2);
         Grid.SetColumn(open, 3);
