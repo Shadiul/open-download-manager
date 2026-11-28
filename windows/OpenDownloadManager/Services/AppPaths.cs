@@ -31,8 +31,8 @@ public static class AppPaths
         Environment.GetEnvironmentVariable("ODM_PROFILE") is { Length: > 0 } p && p.All(char.IsLetterOrDigit) ? p : null;
 
     /// <summary>
-    /// A Debug build or a profile copy: it starts on the Smoke icon, has a purple tray glyph and shows
-    /// "(Dev)" or "(profile)" in its titles, so it can't be mistaken for the installed app next to it.
+    /// A Debug build or a profile copy: it starts on the Smoke icon and shows "(Dev)" or "(profile)" in
+    /// its titles and tray tooltip, so it can't be mistaken for the installed app next to it.
     /// </summary>
 #if DEBUG
     public static bool IsDev => true;
@@ -73,11 +73,10 @@ public static class AppPaths
 
     /// <summary>
     /// The one-colour glyph of the chosen icon, for the tray and the tool windows' title bars: a dark
-    /// glyph for a light taskbar, a white one for a dark taskbar. A development copy's is the Smoke
-    /// glyph in purple, whichever icon is chosen.
+    /// glyph for a light taskbar, a white one for a dark taskbar.
     /// </summary>
     public static string TrayIconPath(bool lightTaskbar) =>
-        Path.Combine(AppDir, "Assets", $"tray{(IsDev ? "-dev" : AppIcon == "smoke" ? "-smoke" : "")}-{(lightTaskbar ? "light" : "dark")}.ico");
+        Path.Combine(AppDir, "Assets", $"tray{(AppIcon == "smoke" ? "-smoke" : "")}-{(lightTaskbar ? "light" : "dark")}.ico");
 
     /// <summary>The user's Downloads folder, wherever they moved it.</summary>
     public static string DownloadsDir { get; } = Profile is null ? KnownDownloads() : Path.Combine(DataDir, "Downloads");

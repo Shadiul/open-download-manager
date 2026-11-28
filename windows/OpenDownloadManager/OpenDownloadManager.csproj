@@ -43,9 +43,6 @@
     <Content Include="Assets\app-smoke.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\tray-smoke-light.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\tray-smoke-dark.ico" CopyToOutputDirectory="PreserveNewest" />
-    <!-- A development copy's purple tray glyphs (AppPaths.IsDev). -->
-    <Content Include="Assets\tray-dev-light.ico" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets\tray-dev-dark.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Windows App SDK's AI and machine-learning parts (onnxruntime, DirectML and their projections),

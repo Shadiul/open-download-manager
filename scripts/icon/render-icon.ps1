@@ -102,13 +102,10 @@ Write-Ico (Join-Path $assets 'app-smoke.ico') $icoSizes 'win-smoke'
 
 # ---- the one-colour icon: the tray and the browser toolbar, one set per theme ----
 # mono-orbit.svg makes tray-light/-dark.ico and the toolbar icons; mono-smoke.svg tray-smoke-light/-dark.ico
-# (both traced by trace-mono.py), and, in purple, a development copy's tray-dev-light/-dark.ico
-# (AppPaths.IsDev), so it stands apart from the installed app in the notification area.
-$plain = @(@('light', '#1A1A1A'), @('dark', '#FFFFFF'))
-$purple = @(@('light', '#7A2BD9'), @('dark', '#B98CFF'))
-foreach ($glyph in @(@('mono-orbit.svg', '', $plain), @('mono-smoke.svg', 'smoke-', $plain), @('mono-smoke.svg', 'dev-', $purple))) {
+# (both traced by trace-mono.py).
+foreach ($glyph in @(@('mono-orbit.svg', ''), @('mono-smoke.svg', 'smoke-'))) {
 $mono = Get-Content (Join-Path $PSScriptRoot $glyph[0]) -Raw
-foreach ($theme in $glyph[2]) {
+foreach ($theme in @(@('light', '#1A1A1A'), @('dark', '#FFFFFF'))) {
     $name = $glyph[1] + $theme[0]
     $svg = Join-Path $out "icon-mono-$name.svg"
     Set-Content $svg ($mono -replace '#000000', $theme[1]) -Encoding utf8
@@ -123,4 +120,4 @@ foreach ($theme in $glyph[2]) {
 }
 
 Remove-Item $profile -Recurse -Force -ErrorAction SilentlyContinue
-Write-Host "Icons written: app.ico, app.png, app-smoke.ico, app-smoke.png, tray-light.ico, tray-dark.ico, tray-smoke-light.ico, tray-smoke-dark.ico, tray-dev-light.ico, tray-dev-dark.ico, extension\icons"
+Write-Host "Icons written: app.ico, app.png, app-smoke.ico, app-smoke.png, tray-light.ico, tray-dark.ico, tray-smoke-light.ico, tray-smoke-dark.ico, extension\icons"
