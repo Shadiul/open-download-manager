@@ -1,6 +1,6 @@
 ﻿# Renders the app icon from its SVG artwork into every size the project uses:
 #   Windows app:  windows/OpenDownloadManager/Assets/app.ico (16 to 256) and app.png (256)
-#                 windows/OpenDownloadManager/Assets/tray-light.ico and tray-dark.ico (16 to 48)
+#                 windows/OpenDownloadManager/Assets/tray-light.ico and tray-dark.ico (16 to 48), tray-smoke-light/-dark.ico
 #   Extension:    extension/icons/16, 32, 48, 128 .png (the extension's own icon)
 #                 extension/icons/toolbar-light-16/32.png and toolbar-dark-16/32.png (toolbar button)
 #   README/macOS: scripts/icon/icon-master.png
@@ -9,7 +9,7 @@
 # icon-master.png ("Orbit") and icon-smoke-master.png ("Smoke") are the colour artwork from 40 px up;
 # icon-small-master.png and icon-smoke-small-master.png, the same without the tile, from 32 px down. All
 # four are artwork renders cut out by cutout-master.py, scaled down with Lanczos (Lanczos.cs).
-# icon-mono.svg is the one-colour glyph for the tray and the browser toolbar, rendered twice: a dark
+# mono-orbit.svg and mono-smoke.svg are the one-colour glyphs for the tray and the browser toolbar, rendered twice: a dark
 # glyph for light taskbars and toolbars ("light"), a white one for dark ones ("dark").
 # All are rasterised by headless Microsoft Edge (or Chrome) on a transparent background, large,
 # then scaled down with high-quality resampling.
@@ -101,9 +101,12 @@ Copy-Item (Join-Path $out 'win-smoke-256.png') (Join-Path $assets 'app-smoke.png
 Write-Ico (Join-Path $assets 'app-smoke.ico') $icoSizes 'win-smoke'
 
 # ---- the one-colour icon: the tray and the browser toolbar, one set per theme ----
-$mono = Get-Content (Join-Path $PSScriptRoot 'icon-mono.svg') -Raw
+# mono-orbit.svg makes tray-light/-dark.ico and the toolbar icons; mono-smoke.svg tray-smoke-light/-dark.ico
+# (both traced by trace-mono.py).
+foreach ($glyph in @(@('mono-orbit.svg', ''), @('mono-smoke.svg', 'smoke-'))) {
+$mono = Get-Content (Join-Path $PSScriptRoot $glyph[0]) -Raw
 foreach ($theme in @(@('light', '#1A1A1A'), @('dark', '#FFFFFF'))) {
-    $name = $theme[0]
+    $name = $glyph[1] + $theme[0]
     $svg = Join-Path $out "icon-mono-$name.svg"
     Set-Content $svg ($mono -replace '#000000', $theme[1]) -Encoding utf8
     $big = Join-Path $out "icon-mono-$name-512.png"
@@ -112,8 +115,9 @@ foreach ($theme in @(@('light', '#1A1A1A'), @('dark', '#FFFFFF'))) {
     $traySizes = 16, 20, 24, 32, 40, 48
     foreach ($s in $traySizes) { Save-Size $big $s (Join-Path $out "tray-$name-$s.png") }
     Write-Ico (Join-Path $assets "tray-$name.ico") $traySizes "tray-$name"
-    foreach ($s in 16, 32) { Save-Size $big $s (Join-Path $extIcons "toolbar-$name-$s.png") }
+    if (-not $glyph[1]) { foreach ($s in 16, 32) { Save-Size $big $s (Join-Path $extIcons "toolbar-$name-$s.png") } }
+}
 }
 
 Remove-Item $profile -Recurse -Force -ErrorAction SilentlyContinue
-Write-Host "Icons written: app.ico, app.png, app-smoke.ico, app-smoke.png, tray-light.ico, tray-dark.ico, extension\icons"
+Write-Host "Icons written: app.ico, app.png, app-smoke.ico, app-smoke.png, tray-light.ico, tray-dark.ico, tray-smoke-light.ico, tray-smoke-dark.ico, extension\icons"
