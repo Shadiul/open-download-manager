@@ -43,6 +43,7 @@ public sealed partial class MainWindow : Window
         if (AppPaths.IsDev) Title = AppTitle.Text = AppPaths.AppName;
         // The title bar shows the icon chosen in Settings (the window's own icon follows in ViewSettings).
         ShowLogo();
+        AppLogo.Loaded += (_, _) => { ShowLogo(); AppLogo.XamlRoot.Changed += (_, _) => ShowLogo(); };
         ViewSettings.Current.PropertyChanged += OnAppIconChanged;
         Closed += (_, _) => ViewSettings.Current.PropertyChanged -= OnAppIconChanged;
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 700));
@@ -65,8 +66,8 @@ public sealed partial class MainWindow : Window
         ShowSortArrows();
     }
 
-    private void ShowLogo() =>
-        AppLogo.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(AppPaths.IconPngPath)) { DecodePixelWidth = 32 };
+    // The chosen icon, full colour without its tile, sharp at the window's scale (as in the tool windows).
+    private void ShowLogo() => IconFrames.Show(AppLogo, 16);
 
     private void OnAppIconChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {

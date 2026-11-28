@@ -1,4 +1,4 @@
-using Microsoft.UI.Windowing;
+﻿using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -63,6 +63,7 @@ public abstract class ToolWindow : Window
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(bar);
             ShowGlyph();
+            _glyph.Loaded += (_, _) => { ShowGlyph(); _glyph.XamlRoot.Changed += (_, _) => ShowGlyph(); };
             ThemeColors.Changed += ShowGlyph;
             Closed += (_, _) => ThemeColors.Changed -= ShowGlyph;
         }
@@ -80,8 +81,8 @@ public abstract class ToolWindow : Window
     }
 
     /// <summary>The white glyph on a dark window, the dark one on a light window.</summary>
-    private void ShowGlyph() =>
-        _glyph.Source = new BitmapImage(new Uri(AppPaths.TrayIconPath(lightTaskbar: !ThemeColors.IsDark)));
+    /// <summary>The chosen app icon, full colour without its tile, sharp at the window's scale.</summary>
+    private void ShowGlyph() => IconFrames.Show(_glyph, 16);
 
     protected void FitHeight()
     {
