@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Open Download Manager",
   "short_name": "Open DM",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Sends browser downloads and videos to the Open Download Manager desktop app.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA98jFb6lWM1moQhwO0WNsAWWWmaEQ0vHBxx0vqs54sTZY0A2OSJqq45W+jQXqjb5XqNSi5XbV5o9nGAo/Kn3QUvcYw644rFVxKa25FLEfP6OaeP5HutBT9sJaMnTl0EH6mtJm8gG8Q5TK6q5CXVmxvxIdzqsP2Rt6ixolCNlCFXlipIBfG2Nbulf+qtR7jhn55XdVrQzwENfcWad9JfE2eJFCyBI42WpHm+gp+2Z4GJbnoPKUTOxWi/xiLYgqnlZqAvECaCbkF4Q1aaOpYsu9nuS/YceGzLDzOhPeRr4K+elhH9k0qGUtsesNslEZ+COBq3znPsNfnxX2OJp9t2tyVwIDAQAB",
   "minimum_chrome_version": "116",
