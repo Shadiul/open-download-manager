@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
@@ -25,10 +25,19 @@ public sealed partial class ViewSettings : ObservableObject
     [ObservableProperty] public partial bool ShowAdded { get; set; } = true;
     [ObservableProperty] public partial string Accent { get; set; } = "system";
     [ObservableProperty] public partial string Backdrop { get; set; } = "mica";
-    [ObservableProperty] public partial string ProgressStyle { get; set; } = "dots";
+    /// <summary>Progress across the row: bar, underline or none (RowFill).</summary>
+    [ObservableProperty] public partial string RowProgress { get; set; } = "bar";
+    /// <summary>The row's look: dots, solid, glass or stripes.</summary>
+    [ObservableProperty] public partial string RowLook { get; set; } = "dots";
+    /// <summary>Progress in the Progress column: ring, bar or text (ProgressCell).</summary>
+    [ObservableProperty] public partial string ColumnProgress { get; set; } = "text";
+    /// <summary>The column's look: dots, solid, glass or stripes.</summary>
+    [ObservableProperty] public partial string ColumnLook { get; set; } = "solid";
     [ObservableProperty] public partial string Animation { get; set; } = "calm";
     [ObservableProperty] public partial string FillStrength { get; set; } = "normal";
     [ObservableProperty] public partial string ColorBy { get; set; } = "status";
+    /// <summary>The colour icon: orbit or smoke (AppPaths.IconPath).</summary>
+    [ObservableProperty] public partial string AppIcon { get; set; } = AppPaths.AppIcon;
 
     public void Load(AppSettings store)
     {
@@ -42,18 +51,38 @@ public sealed partial class ViewSettings : ObservableObject
         ShowAdded = store.ShowAdded;
         Accent = store.Accent;
         Backdrop = store.Backdrop;
-        ProgressStyle = store.ProgressStyle;
+        // Settings from before the split come from the one style there was.
+        var old = store.ProgressStyle;
+        RowProgress = store.RowProgress ?? old switch { "underline" => "underline", "none" or "ring" or "bar" => "none", _ => "bar" };
+        RowLook = store.RowLook ?? (old is "solid" or "glass" or "stripes" ? old : old == "underline" ? "solid" : "dots");
+        ColumnProgress = store.ColumnProgress ?? old switch { "ring" => "ring", "bar" => "bar", _ => "text" };
+        ColumnLook = store.ColumnLook ?? "solid";
         Animation = store.Animation;
         FillStrength = store.FillStrength;
         ColorBy = store.ColorBy;
+        AppIcon = store.AppIcon is "orbit" or "smoke" ? store.AppIcon : AppPaths.AppIcon;
+        // The installer puts back the shortcuts' own icon when it updates the app.
+        AppShortcuts.Sync();
     }
 
     partial void OnAccentChanged(string value) { Save(s => s.Accent = value); Appearance.ApplyAccent(); }
     partial void OnBackdropChanged(string value) { Save(s => s.Backdrop = value); Appearance.ApplyBackdrops(); }
-    partial void OnProgressStyleChanged(string value) { Save(s => s.ProgressStyle = value); Appearance.RaiseRowsChanged(); }
+    partial void OnRowProgressChanged(string value) { Save(s => s.RowProgress = value); Appearance.RaiseRowsChanged(); }
+    partial void OnRowLookChanged(string value) { Save(s => s.RowLook = value); Appearance.RaiseRowsChanged(); }
+    partial void OnColumnProgressChanged(string value) { Save(s => s.ColumnProgress = value); Appearance.RaiseRowsChanged(); }
+    partial void OnColumnLookChanged(string value) { Save(s => s.ColumnLook = value); Appearance.RaiseRowsChanged(); }
     partial void OnAnimationChanged(string value) { Save(s => s.Animation = value); Appearance.RaiseRowsChanged(); }
     partial void OnFillStrengthChanged(string value) { Save(s => s.FillStrength = value); Appearance.RaiseRowsChanged(); }
     partial void OnColorByChanged(string value) { Save(s => s.ColorBy = value); Appearance.RaiseRowsChanged(); }
+
+    partial void OnAppIconChanged(string value)
+    {
+        AppPaths.AppIcon = value;
+        Save(s => s.AppIcon = value);
+        foreach (var w in LiveWindows()) w.AppWindow.SetIcon(AppPaths.IconPath);
+        ThemeColors.RaiseIconChanged();
+        AppShortcuts.Sync();
+    }
 
     partial void OnThemeChanged(string value)
     {

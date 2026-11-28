@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 using Windows.UI.ViewManagement;
@@ -70,6 +70,16 @@ public static class ThemeColors
     {
         Cache.Clear();
         Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// The App icon choice changed: the tray icon (on SystemColorsChanged) and the tool windows'
+    /// title-bar glyphs (on Changed) are drawn again from AppPaths.TrayIconPath.
+    /// </summary>
+    public static void RaiseIconChanged()
+    {
+        RaiseChanged();
+        SystemColorsChanged?.Invoke();
     }
 
     /// <summary>The accent's shades: the user's pick, or Windows' own.</summary>
