@@ -473,7 +473,9 @@ public sealed partial class SettingsPage : UserControl
 
     private void BuildSwatches()
     {
-        _swatches.Items.Add(Swatch("system", "Windows accent", ""));
+        // Windows' accent: the System glyph (a monitor), in Segoe Fluent Icons and Segoe MDL2 Assets alike.
+        // When it is the one in use, the check replaces it, as on every other swatch.
+        _swatches.Items.Add(Swatch("system", "Windows accent", "\uE770"));
         foreach (var (name, hex) in Appearance.Presets)
             _swatches.Items.Add(Swatch(hex, name, null));
 
