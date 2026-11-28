@@ -87,8 +87,9 @@ SetUpExtensionNote=Adds it to Edge, Chrome or another browser, so their download
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Shown from the welcome page's licence link.
-Source: "..\LICENSE"; Flags: dontcopy
+; Shown from the welcome page's licence link. A name of its own: the app's tools also carry
+; files called LICENSE, and ExtractTemporaryFile takes the first match.
+Source: "..\LICENSE"; DestName: "odm-gpl-licence.txt"; Flags: dontcopy
 
 [InstallDelete]
 ; Files from an older version that this one no longer ships.
@@ -238,8 +239,8 @@ var
   Text: AnsiString;
   Body: String;
 begin
-  ExtractTemporaryFile('LICENSE');
-  LoadStringFromFile(ExpandConstant('{tmp}\LICENSE'), Text);
+  ExtractTemporaryFile('odm-gpl-licence.txt');
+  LoadStringFromFile(ExpandConstant('{tmp}\odm-gpl-licence.txt'), Text);
   Body := String(Text);
   StringChangeEx(Body, #13#10, #10, True);
   StringChangeEx(Body, #10, #13#10, True);
