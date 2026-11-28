@@ -114,6 +114,85 @@ var
   FolderLabel, FolderPath, LicenceNote, LicenceLink, ExtensionNote: TNewStaticText;
   ChangeButton: TNewButton;
   DesktopIcon, Extension: TNewCheckBox;
+  BarTrack, BarFill: TBitmapImage;
+
+// Windows' accent colour, as the app uses it: a shade darker on light pages, lighter on dark ones.
+function AccentColor: TColor;
+var
+  Abgr: Cardinal;
+  R, G, B: Integer;
+begin
+  if not RegQueryDWordValue(HKCU, 'Software\Microsoft\Windows\DWM', 'AccentColor', Abgr) then Abgr := $D47800;
+  R := Abgr and $FF; G := (Abgr shr 8) and $FF; B := (Abgr shr 16) and $FF;
+  if IsDarkInstallMode then
+  begin
+    R := R + (255 - R) * 45 div 100; G := G + (255 - G) * 45 div 100; B := B + (255 - B) * 45 div 100;
+  end else
+  begin
+    R := R * 82 div 100; G := G * 82 div 100; B := B * 82 div 100;
+  end;
+  Result := R or (G shl 8) or (B shl 16);
+end;
+
+// One left edge for the header and the page under it, the header's text centred in its band,
+// and the small picture fully inside it with the same margin on the right as the page.
+procedure LayoutHeader;
+var
+  Panel: TPanel;
+  Edge, Margin, Size, TextTop, TextWidth: Integer;
+begin
+  Panel := WizardForm.MainPanel;
+  Edge := WizardForm.InnerNotebook.Left;
+  Margin := Panel.ClientWidth - (WizardForm.InnerNotebook.Left + WizardForm.InnerNotebook.Width);
+  Size := ScaleY(40);
+  WizardForm.WizardSmallBitmapImage.Stretch := True;
+  WizardForm.WizardSmallBitmapImage.SetBounds(Panel.ClientWidth - Margin - Size, (Panel.ClientHeight - Size) div 2, Size, Size);
+  TextWidth := WizardForm.WizardSmallBitmapImage.Left - Edge - ScaleX(16);
+  WizardForm.PageNameLabel.SetBounds(Edge, 0, TextWidth, WizardForm.PageNameLabel.Height);
+  WizardForm.PageDescriptionLabel.AutoSize := False;
+  WizardForm.PageDescriptionLabel.SetBounds(Edge, 0, TextWidth, ScaleY(16));
+  TextTop := (Panel.ClientHeight - (WizardForm.PageNameLabel.Height + ScaleY(4) + WizardForm.PageDescriptionLabel.Height)) div 2;
+  WizardForm.PageNameLabel.Top := TextTop;
+  WizardForm.PageDescriptionLabel.Top := TextTop + WizardForm.PageNameLabel.Height + ScaleY(4);
+end;
+
+// A solid block of colour that every wizard style paints as it is.
+procedure Fill(Image: TBitmapImage; Color: TColor);
+begin
+  Image.BackColor := Color;
+  Image.Stretch := True;
+  Image.Bitmap.Width := 1;
+  Image.Bitmap.Height := 1;
+  Image.Bitmap.Canvas.Pixels[0, 0] := Color;
+end;
+
+// The Installing page: what is happening, a thin bar in the accent colour, then the file.
+procedure LayoutInstalling;
+var
+  Page: TNewNotebookPage;
+  Top: Integer;
+begin
+  Page := WizardForm.InstallingPage;
+  WizardForm.StatusLabel.Top := ScaleY(8);
+  Top := WizardForm.StatusLabel.Top + WizardForm.StatusLabel.Height + ScaleY(12);
+  WizardForm.ProgressGauge.Visible := False;
+  // Bitmap images, not panels: the dark style repaints panels in its own colour.
+  BarTrack := TBitmapImage.Create(WizardForm);
+  BarTrack.Parent := Page;
+  if IsDarkInstallMode then Fill(BarTrack, $3A3A3A) else Fill(BarTrack, $E0E0E0);
+  BarTrack.SetBounds(WizardForm.ProgressGauge.Left, Top, WizardForm.ProgressGauge.Width, ScaleY(6));
+  BarFill := TBitmapImage.Create(WizardForm);
+  BarFill.Parent := Page;
+  Fill(BarFill, AccentColor);
+  BarFill.SetBounds(BarTrack.Left, BarTrack.Top, 0, BarTrack.Height);
+  WizardForm.FilenameLabel.Top := BarTrack.Top + BarTrack.Height + ScaleY(10);
+  WizardForm.FilenameLabel.Font.Color := clGrayText;
+end;
+
+procedure CurInstallProgressChanged(CurProgress, MaxProgress: Integer);
+begin
+  if MaxProgress > 0 then BarFill.Width := MulDiv(BarTrack.Width, CurProgress, MaxProgress);
+end;
 
 function IsUpgrade: Boolean;
 begin
@@ -260,6 +339,9 @@ begin
   ExtensionNote.Caption := CustomMessage('SetUpExtensionNote');
   ExtensionNote.Font.Color := clGrayText;
   ExtensionNote.WordWrap := True;
+
+  LayoutHeader;
+  LayoutInstalling;
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
