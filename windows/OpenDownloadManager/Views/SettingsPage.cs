@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -66,6 +66,7 @@ public sealed partial class SettingsPage : UserControl
     private readonly GridView _rowLook = Picker("Row look", followFocus: true);
     private readonly GridView _columnShape = Picker("In the Progress column", followFocus: true);
     private readonly GridView _columnLook = Picker("Column look", followFocus: true);
+    private readonly GridView _appIcon = Picker("App icon", followFocus: true);
 
     // System
     private readonly ToggleSwitch _startWithWindows = Switch();
@@ -172,6 +173,11 @@ public sealed partial class SettingsPage : UserControl
         Section(page, "Appearance", "\uE790");
         page.Children.Add(Preview());
         page.Children.Add(Card("\uE793", "Theme", null, _theme));
+        page.Children.Add(Card("\uE8B9", "App icon",
+            AppPaths.IsDev
+                ? "For the windows, the taskbar and Alt+Tab. A development copy leaves the Start menu and desktop shortcuts alone."
+                : "For the windows, the taskbar, Alt+Tab and the Start menu and desktop shortcuts. The icon of the app's .exe file itself stays Orbit.",
+            null, extra: _appIcon));
         page.Children.Add(Card("\uE790", "Accent colour", "For buttons, switches, selection and the rows.", null, extra: _swatches));
         page.Children.Add(Card("\uE7F4", "Window material", "Mica takes on the desktop's colours; Acrylic shows it through, blurred.", _backdrop));
         page.Children.Add(Card("\uE9D9", "Progress across the row", "Each download's row fills as it goes.", null, extra: PickerPair(_rowShape, _rowLook)));
@@ -237,12 +243,13 @@ public sealed partial class SettingsPage : UserControl
         BuildProgressPickers();
         SyncSwatches();
         SyncProgressPickers();
+        BuildAppIcons();
         Wire();
         _loading = false;
 
         // Accent or style changed elsewhere (or Windows' accent): move the selection to match.
         Listen(true);
-        Loaded += (_, _) => { Listen(true); SyncSwatches(); SyncProgressPickers(); };
+        Loaded += (_, _) => { Listen(true); SyncSwatches(); SyncProgressPickers(); SyncAppIcon(); };
         Unloaded += (_, _) => Listen(false);
 
         AfterDownload.QueueActionChanged += OnQueueActionChanged;
@@ -674,9 +681,62 @@ public sealed partial class SettingsPage : UserControl
         _columnLook.IsEnabled = v.ColumnProgress != "text";
     }
 
+    // ----- app icon -----
+
+    private static readonly (string Value, string Label)[] AppIcons = [("orbit", "Orbit"), ("smoke", "Smoke")];
+
+    /// <summary>A tile for each colour icon: a picture of it over its name.</summary>
+    private void BuildAppIcons()
+    {
+        foreach (var (value, label) in AppIcons)
+        {
+            var tile = new GridViewItem
+            {
+                Tag = value,
+                Width = 132,
+                Padding = new Thickness(10, 12, 10, 8),
+                Margin = new Thickness(0, 0, 8, 8),
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                Content = new StackPanel
+                {
+                    Spacing = 8,
+                    Children =
+                    {
+                        new Image
+                        {
+                            Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(AppPaths.IconFile(value, "png"))) { DecodePixelWidth = 128 },
+                            Width = 64,
+                            Height = 64,
+                            HorizontalAlignment = HorizontalAlignment.Center,
+                        },
+                        new TextBlock { Text = label, HorizontalAlignment = HorizontalAlignment.Center, Style = ThemedStyles.Text(caption: true, secondary: false) },
+                    },
+                },
+            };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tile, label);
+            _appIcon.Items.Add(tile);
+        }
+        _appIcon.SelectionChanged += (_, _) =>
+        {
+            if (_syncing) return;
+            if (_appIcon.SelectedItem is GridViewItem { Tag: string value }) ViewSettings.Current.AppIcon = value;
+            else DispatcherQueue.TryEnqueue(SyncAppIcon);
+        };
+        SyncAppIcon();
+    }
+
+    private void SyncAppIcon()
+    {
+        _syncing = true;
+        var tiles = _appIcon.Items.OfType<GridViewItem>().ToList();
+        _appIcon.SelectedItem = tiles.FirstOrDefault(t => (string)t.Tag == ViewSettings.Current.AppIcon) ?? tiles[0];
+        _syncing = false;
+    }
+
     private void OnViewSettingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ViewSettings.Accent)) SyncSwatches();
+        if (e.PropertyName == nameof(ViewSettings.AppIcon)) SyncAppIcon();
+        else if (e.PropertyName == nameof(ViewSettings.Accent)) SyncSwatches();
         else if (e.PropertyName is nameof(ViewSettings.RowProgress) or nameof(ViewSettings.RowLook)
             or nameof(ViewSettings.ColumnProgress) or nameof(ViewSettings.ColumnLook)) SyncProgressPickers();
     }

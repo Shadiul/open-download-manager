@@ -44,6 +44,8 @@ public sealed class AppSettings
     public string FillStrength { get; set; } = "normal";
     /// <summary>status, or type (each kind of file in its own colour).</summary>
     public string ColorBy { get; set; } = "status";
+    /// <summary>The colour icon: orbit or smoke. Missing means the default (Orbit; Smoke in a development copy).</summary>
+    public string? AppIcon { get; set; }
 
     // After each download (see AfterDownload).
     public bool AfterOpen { get; set; }

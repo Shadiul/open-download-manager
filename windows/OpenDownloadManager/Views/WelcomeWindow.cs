@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 using Microsoft.UI;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
@@ -222,7 +222,7 @@ public sealed class WelcomeWindow : ToolWindow
 
     private static Image AppArt(double size) => new()
     {
-        Source = new BitmapImage(new Uri(System.IO.Path.Combine(AppPaths.AppDir, "Assets", "app.png"))) { DecodePixelWidth = (int)Math.Ceiling(size * 2) },
+        Source = new BitmapImage(new Uri(AppPaths.IconPngPath)) { DecodePixelWidth = (int)Math.Ceiling(size * 2) },
         Width = size,
         Height = size,
     };

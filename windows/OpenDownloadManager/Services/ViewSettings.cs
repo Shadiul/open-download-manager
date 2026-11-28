@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
@@ -36,6 +36,8 @@ public sealed partial class ViewSettings : ObservableObject
     [ObservableProperty] public partial string Animation { get; set; } = "calm";
     [ObservableProperty] public partial string FillStrength { get; set; } = "normal";
     [ObservableProperty] public partial string ColorBy { get; set; } = "status";
+    /// <summary>The colour icon: orbit or smoke (AppPaths.IconPath).</summary>
+    [ObservableProperty] public partial string AppIcon { get; set; } = AppPaths.AppIcon;
 
     public void Load(AppSettings store)
     {
@@ -58,6 +60,9 @@ public sealed partial class ViewSettings : ObservableObject
         Animation = store.Animation;
         FillStrength = store.FillStrength;
         ColorBy = store.ColorBy;
+        AppIcon = store.AppIcon is "orbit" or "smoke" ? store.AppIcon : AppPaths.AppIcon;
+        // The installer puts back the shortcuts' own icon when it updates the app.
+        AppShortcuts.Sync();
     }
 
     partial void OnAccentChanged(string value) { Save(s => s.Accent = value); Appearance.ApplyAccent(); }
@@ -69,6 +74,14 @@ public sealed partial class ViewSettings : ObservableObject
     partial void OnAnimationChanged(string value) { Save(s => s.Animation = value); Appearance.RaiseRowsChanged(); }
     partial void OnFillStrengthChanged(string value) { Save(s => s.FillStrength = value); Appearance.RaiseRowsChanged(); }
     partial void OnColorByChanged(string value) { Save(s => s.ColorBy = value); Appearance.RaiseRowsChanged(); }
+
+    partial void OnAppIconChanged(string value)
+    {
+        AppPaths.AppIcon = value;
+        Save(s => s.AppIcon = value);
+        foreach (var w in LiveWindows()) w.AppWindow.SetIcon(AppPaths.IconPath);
+        AppShortcuts.Sync();
+    }
 
     partial void OnThemeChanged(string value)
     {

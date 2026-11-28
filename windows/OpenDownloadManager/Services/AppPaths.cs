@@ -31,8 +31,8 @@ public static class AppPaths
         Environment.GetEnvironmentVariable("ODM_PROFILE") is { Length: > 0 } p && p.All(char.IsLetterOrDigit) ? p : null;
 
     /// <summary>
-    /// A Debug build or a profile copy: it shows a purple icon and "(Dev)" or "(profile)" in its titles,
-    /// so it can't be mistaken for the installed app running next to it.
+    /// A Debug build or a profile copy: it starts on the Smoke icon, has a purple tray glyph and shows
+    /// "(Dev)" or "(profile)" in its titles, so it can't be mistaken for the installed app next to it.
     /// </summary>
 #if DEBUG
     public static bool IsDev => true;
@@ -56,17 +56,27 @@ public static class AppPaths
 
     public static string AppExe { get; } = Path.Combine(AppDir, "OpenDownloadManager.exe");
 
-    // A development copy uses the purple -dev versions of the icons.
-    private static string Dev => IsDev ? "-dev" : "";
+    /// <summary>
+    /// The colour icon the user chose in Settings: "orbit" or "smoke". A development copy starts on
+    /// Smoke so it stands apart from the installed app. Set by ViewSettings.
+    /// </summary>
+    public static string AppIcon { get; set; } = IsDev ? "smoke" : "orbit";
 
-    public static string IconPath { get; } = Path.Combine(AppDir, "Assets", $"app{Dev}.ico");
+    /// <summary>The chosen icon for windows, the taskbar and Alt+Tab.</summary>
+    public static string IconPath => IconFile(AppIcon, "ico");
 
-    /// <summary>The 256 px icon, for the main window's title bar.</summary>
-    public static string IconPngPath { get; } = Path.Combine(AppDir, "Assets", $"app{Dev}.png");
+    /// <summary>The chosen icon at 256 px, for pictures of it in the app.</summary>
+    public static string IconPngPath => IconFile(AppIcon, "png");
 
-    /// <summary>The one-colour tray icon: a dark glyph for a light taskbar, a white one for a dark taskbar.</summary>
+    public static string IconFile(string icon, string extension) =>
+        Path.Combine(AppDir, "Assets", icon == "smoke" ? $"app-smoke.{extension}" : $"app.{extension}");
+
+    /// <summary>
+    /// The one-colour tray icon: a dark glyph for a light taskbar, a white one for a dark taskbar,
+    /// purple ones in a development copy.
+    /// </summary>
     public static string TrayIconPath(bool lightTaskbar) =>
-        Path.Combine(AppDir, "Assets", $"tray{Dev}-{(lightTaskbar ? "light" : "dark")}.ico");
+        Path.Combine(AppDir, "Assets", $"tray{(IsDev ? "-dev" : "")}-{(lightTaskbar ? "light" : "dark")}.ico");
 
     /// <summary>The user's Downloads folder, wherever they moved it.</summary>
     public static string DownloadsDir { get; } = Profile is null ? KnownDownloads() : Path.Combine(DataDir, "Downloads");

@@ -38,9 +38,10 @@
     <Content Include="Assets\app.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\tray-light.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\tray-dark.ico" CopyToOutputDirectory="PreserveNewest" />
-    <!-- A development copy's purple icons (AppPaths.IsDev). -->
-    <Content Include="Assets\app-dev.ico" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets\app-dev.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The second colour icon, chosen in Settings (AppPaths.AppIcon). -->
+    <Content Include="Assets\app-smoke.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\app-smoke.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- A development copy's purple tray glyphs (AppPaths.IsDev). -->
     <Content Include="Assets\tray-dev-light.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\tray-dev-dark.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

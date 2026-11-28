@@ -40,11 +40,11 @@ public sealed partial class MainWindow : Window
         // The caption buttons at their standard height, matching the 32 px title row.
         AppWindow.TitleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Standard;
         AppWindow.SetIcon(AppPaths.IconPath);
-        if (AppPaths.IsDev)
-        {
-            Title = AppTitle.Text = AppPaths.AppName;
-            AppLogo.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(AppPaths.IconPngPath));
-        }
+        if (AppPaths.IsDev) Title = AppTitle.Text = AppPaths.AppName;
+        // The title bar shows the icon chosen in Settings (the window's own icon follows in ViewSettings).
+        ShowLogo();
+        ViewSettings.Current.PropertyChanged += OnAppIconChanged;
+        Closed += (_, _) => ViewSettings.Current.PropertyChanged -= OnAppIconChanged;
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 700));
         if (AppWindow.Presenter is OverlappedPresenter p)
         {
@@ -63,6 +63,14 @@ public sealed partial class MainWindow : Window
         ViewSettings.Current.Track(this);
         Appearance.Track(this);
         ShowSortArrows();
+    }
+
+    private void ShowLogo() =>
+        AppLogo.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(AppPaths.IconPngPath)) { DecodePixelWidth = 32 };
+
+    private void OnAppIconChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ViewSettings.AppIcon)) ShowLogo();
     }
 
     // ----- search, filters, view options -----
