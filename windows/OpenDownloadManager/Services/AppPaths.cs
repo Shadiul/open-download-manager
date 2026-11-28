@@ -47,6 +47,9 @@ public static class AppPaths
 
     public static string IconPath { get; } = Path.Combine(AppDir, "Assets", "app.ico");
 
+    /// <summary>The one-colour tray icon: a dark glyph for a light taskbar, a white one for a dark taskbar.</summary>
+    public static string TrayIconPath(bool lightTaskbar) => Path.Combine(AppDir, "Assets", lightTaskbar ? "tray-light.ico" : "tray-dark.ico");
+
     /// <summary>The user's Downloads folder, wherever they moved it.</summary>
     public static string DownloadsDir { get; } = Profile is null ? KnownDownloads() : Path.Combine(DataDir, "Downloads");
 
