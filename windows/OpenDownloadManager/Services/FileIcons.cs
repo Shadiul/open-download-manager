@@ -64,6 +64,17 @@ public static class FileIcons
         }
     }
 
+    /// <summary>The type's name as Explorer shows it ("Application", "PDF Document"), or null.</summary>
+    public static string? TypeName(string fileName)
+    {
+        const uint SHGFI_TYPENAME = 0x400, SHGFI_USEFILEATTRIBUTES = 0x10, FILE_ATTRIBUTE_NORMAL = 0x80;
+        var ext = Path.GetExtension(fileName);
+        if (string.IsNullOrEmpty(ext)) return null;
+        var info = new SHFILEINFO();
+        var ok = SHGetFileInfo("file" + ext, FILE_ATTRIBUTE_NORMAL, ref info, (uint)System.Runtime.InteropServices.Marshal.SizeOf<SHFILEINFO>(), SHGFI_TYPENAME | SHGFI_USEFILEATTRIBUTES);
+        return ok == IntPtr.Zero || string.IsNullOrWhiteSpace(info.szTypeName) ? null : info.szTypeName;
+    }
+
     /// <summary>A type's icon (<paramref name="ofFile"/> false: pass an extension) or a file's own.</summary>
     private static byte[]? ShellIconPng(string extOrPath, bool ofFile)
     {
