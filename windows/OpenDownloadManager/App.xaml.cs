@@ -44,6 +44,7 @@ public partial class App : Application
         _ui = DispatcherQueue.GetForCurrentThread();
         ViewSettings.Current.Load(Settings);
         Appearance.ApplyAccent();
+        ThemeColors.Watch();
         Notifications.Invoked += a => _ui.TryEnqueue(() => OnNotification(a));
         var profile = AppPaths.Profile;
         if (profile is null) Notifications.Register();

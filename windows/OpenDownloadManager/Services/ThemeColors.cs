@@ -22,8 +22,28 @@ public static class ThemeColors
     {
         ElementTheme.Dark => true,
         ElementTheme.Light => false,
-        _ => Application.Current.RequestedTheme == ApplicationTheme.Dark,
+        _ => SystemIsDark,
     };
+
+    /// <summary>
+    /// Windows' app mode as it is now. Application.RequestedTheme keeps the mode the app started
+    /// in, so after Windows switches it would give dark colours on a light window (or the reverse).
+    /// Windows' text colour follows the switch: light text means dark mode.
+    /// </summary>
+    private static bool SystemIsDark => Ui.GetColorValue(UIColorType.Foreground).R > 128;
+
+    private static Microsoft.UI.Dispatching.DispatcherQueue? _ui;
+
+    /// <summary>Call once on the UI thread: Windows switching light/dark (or its accent) repaints the colours.</summary>
+    public static void Watch()
+    {
+        _ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        Ui.ColorValuesChanged += (_, _) => _ui?.TryEnqueue(() =>
+        {
+            if (Appearance.CustomAccent is null) Appearance.ApplyAccent();
+            else RaiseChanged();
+        });
+    }
 
     public static void RaiseChanged()
     {
