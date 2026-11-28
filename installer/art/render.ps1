@@ -1,4 +1,4 @@
-# Renders the installer's wizard images from the app icon (scripts/icon/icon.svg):
+# Renders the installer's wizard images from the app icon (scripts/icon/icon-master.png):
 #   wizard-<scale>.png       the side panel on the Finish page, light (and Windows in light mode)
 #   wizard-dark-<scale>.png  the same for dark mode
 #   small-<scale>.png        the icon at the top right of the other pages (transparent, both modes)
@@ -17,7 +17,7 @@ if (-not $browser) { throw 'Microsoft Edge or Google Chrome is needed to render 
 
 $work = Join-Path ([IO.Path]::GetTempPath()) 'odm-installer-art'
 New-Item -ItemType Directory -Force $work | Out-Null
-$icon = 'file:///' + ((Join-Path $root 'scripts\icon\icon.svg') -replace '\\', '/')
+$icon = 'file:///' + ((Join-Path $root 'scripts\icon\icon-master.png') -replace '\\', '/')
 
 # Image areas from Inno Setup's help (WizardImageFile, WizardSmallImageFile), per scale.
 #           scale, side panel w x h, small image
