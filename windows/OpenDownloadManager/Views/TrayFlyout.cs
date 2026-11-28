@@ -135,7 +135,8 @@ public sealed class TrayFlyout : Window
             if (e.Key == Windows.System.VirtualKey.Enter) { e.Handled = true; AddLink(); }
         };
         _link.TextChanged += (_, _) => _linkError!.Visibility = Visibility.Collapsed;
-        var download = new Button { Content = "Download", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        _link.Height = 32;
+        var download = new Button { Content = "Download", Height = 32, Padding = new Thickness(12, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
         download.Click += (_, _) => AddLink();
         Grid.SetColumn(download, 1);
         var linkRow = new Grid { ColumnSpacing = 8, ColumnDefinitions = { new ColumnDefinition(), new ColumnDefinition { Width = GridLength.Auto } }, Children = { _link, download } };
@@ -145,35 +146,43 @@ public sealed class TrayFlyout : Window
         // ----- footer: pause or resume all, when downloads finish, settings, open -----
         _pauseResumeIcon = new FontIcon { FontSize = 14 };
         _pauseResumeText = new TextBlock();
-        _pauseResume = new Button { Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _pauseResumeIcon, _pauseResumeText } } };
+        _pauseResume = FooterButton(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _pauseResumeIcon, _pauseResumeText } });
         _pauseResume.Click += async (_, _) =>
         {
             await _core.CallAsync(new { type = _pauseResumeText.Text == "Pause all" ? "pauseAll" : "resumeAll" });
             Refresh();
         };
-        _whenDoneText = new TextBlock();
+        _whenDoneText = new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
         var whenDoneMenu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.TopEdgeAlignedLeft };
         whenDoneMenu.Opening += (_, _) => AfterDownload.FillMenu(whenDoneMenu.Items, _core, AfterDownload.QueueAction(_core));
         _whenDone = new DropDownButton
         {
-            Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new FontIcon { Glyph = "", FontSize = 14 }, _whenDoneText } },
+            // Text only: the chevron already says it opens a menu, and the room goes to the action's name.
+            Content = _whenDoneText,
             Flyout = whenDoneMenu,
+            Height = 32,
+            Padding = new Thickness(11, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Left,
         };
-        ToolTipService.SetToolTip(_whenDone, "When downloads finish");
+        // Its label says what it is; a tooltip would only cover the link field above it.
         AfterDownload.QueueActionChanged += value => DispatcherQueue.TryEnqueue(() => ShowQueueAction(value));
         var settings = IconButton("", "Settings", () => { Close(); App.Current?.ShowSettings(); });
         var open = IconButton("", "Open Open Download Manager", () => { Close(); App.Current?.ShowWindow(); });
         Grid.SetColumn(_whenDone, 1);
-        Grid.SetColumn(settings, 3);
-        Grid.SetColumn(open, 4);
+        Grid.SetColumn(settings, 2);
+        Grid.SetColumn(open, 3);
+        // One row of 32 px controls on an 8 px grid, with the flyout's 16 px side margins:
+        // Pause all | When done (takes the room left, trims a long action) | Settings | Open.
+        foreach (var b in new[] { settings, open }) ToolTipService.SetPlacement(b, Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Bottom);
         var foot = new Grid
         {
-            Padding = new Thickness(12, 8, 8, 8),
-            ColumnSpacing = 4,
+            Padding = new Thickness(16, 8, 16, 8),
+            ColumnSpacing = 8,
             ColumnDefinitions =
             {
+                new ColumnDefinition { Width = GridLength.Auto }, new ColumnDefinition(),
                 new ColumnDefinition { Width = GridLength.Auto }, new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition(), new ColumnDefinition { Width = GridLength.Auto }, new ColumnDefinition { Width = GridLength.Auto },
             },
             Children = { _pauseResume, _whenDone, settings, open },
         };
@@ -425,7 +434,9 @@ public sealed class TrayFlyout : Window
 
     private void ShowQueueAction(string value)
     {
-        _whenDoneText.Text = value == "nothing" ? "When done" : AfterDownload.Label(value);
+        // The short form ("Shut down", "Close the app") keeps the footer on one line.
+        var shortForm = AfterDownload.QueueActions.FirstOrDefault(x => x.Value == value).Short ?? "";
+        _whenDoneText.Text = value == "nothing" || shortForm.Length == 0 ? "When done" : char.ToUpper(shortForm[0]) + shortForm[1..];
         AutomationProperties.SetName(_whenDone, $"When downloads finish: {AfterDownload.Label(value)}");
     }
 
@@ -482,7 +493,10 @@ public sealed class TrayFlyout : Window
         var work = display.WorkArea;
         var bounds = display.OuterBounds;
         var scale = DpiFor(display) / 96.0;
-        int w = (int)Math.Ceiling(width * scale), h = (int)Math.Ceiling(height * scale), gap = (int)Math.Round(12 * scale);
+        // The sizes are the content's; the window's border comes on top, or it would cut the right and bottom edges.
+        var frameW = Math.Max(0, AppWindow.Size.Width - AppWindow.ClientSize.Width);
+        var frameH = Math.Max(0, AppWindow.Size.Height - AppWindow.ClientSize.Height);
+        int w = (int)Math.Ceiling(width * scale) + frameW, h = (int)Math.Ceiling(height * scale) + frameH, gap = (int)Math.Round(12 * scale);
         h = Math.Min(h, work.Height - 2 * gap);
         var cx = _anchor.X + _anchor.Width / 2;
         var cy = _anchor.Y + _anchor.Height / 2;
@@ -551,13 +565,22 @@ public sealed class TrayFlyout : Window
         Style = ThemedStyles.Get("Border", null, ("BorderBrush", "DividerStrokeColorDefaultBrush")),
     };
 
+    private static Button FooterButton(object content) => new()
+    {
+        Content = content,
+        Height = 32,
+        Padding = new Thickness(11, 0, 11, 0),
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
     private static Button IconButton(string glyph, string name, Action action)
     {
         var button = new Button
         {
             Content = new FontIcon { Glyph = glyph, FontSize = 16 },
-            Width = 36,
+            Width = 32,
             Height = 32,
+            VerticalAlignment = VerticalAlignment.Center,
             Padding = new Thickness(0),
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             BorderThickness = new Thickness(0),
