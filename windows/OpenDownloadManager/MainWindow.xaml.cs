@@ -21,6 +21,9 @@ public sealed partial class MainWindow : Window
         ViewModel = viewModel;
         InitializeComponent();
         ShowDensity();
+        var find = new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = Windows.System.VirtualKey.F, Modifiers = Windows.System.VirtualKeyModifiers.Control };
+        find.Invoked += (_, a) => { Search.Focus(FocusState.Keyboard); a.Handled = true; };
+        if (Content is UIElement root) root.KeyboardAccelerators.Add(find);
         // The Pause/Resume button follows the selection and the downloads' states; a light poll
         // covers both without wiring every item.
         var pauseResume = DispatcherQueue.CreateTimer();
@@ -121,9 +124,19 @@ public sealed partial class MainWindow : Window
         ShowDensity();
     }
 
+    /// <summary>Each density as rows in a 16 px square.</summary>
+    private static readonly Dictionary<string, string> DensityShapes = new()
+    {
+        ["compact"] = "M2,2.25H14V3.75H2Z M2,6.25H14V7.75H2Z M2,10.25H14V11.75H2Z M2,14.25H14V15.75H2Z",
+        ["standard"] = "M2,2.5H14V4.25H2Z M2,7.25H14V9H2Z M2,12H14V13.75H2Z",
+        ["comfortable"] = "M2,2.5H14V6.5H2Z M2,9.5H14V13.5H2Z",
+    };
+
     private void ShowDensity()
     {
         var current = ViewSettings.Current.Density;
+        DensityIcon.Data = (Microsoft.UI.Xaml.Media.Geometry)Microsoft.UI.Xaml.Markup.XamlBindingHelper.ConvertValue(
+            typeof(Microsoft.UI.Xaml.Media.Geometry), DensityShapes.GetValueOrDefault(current, DensityShapes["standard"]));
         var next = Densities[(Array.IndexOf(Densities, current) + 1) % Densities.Length];
         static string Name(string d) => char.ToUpperInvariant(d[0]) + d[1..];
         ToolTipService.SetToolTip(DensityButton, $"Rows: {Name(current)}. Click for {Name(next)}.");
@@ -170,43 +183,45 @@ public sealed partial class MainWindow : Window
     private const double LabelledActionsWidth = 312, LabelledToolsWidth = 236;
 
     /// <summary>
-    /// The search stays centred, so each side gets half of what it leaves. Labels show where they
-    /// fit: the filter, columns and view buttons first, then the actions; otherwise those become
-    /// icon buttons. Narrow windows give the search a row of its own.
+    /// Labels show where they fit: the filter and columns buttons first, then the actions;
+    /// otherwise those become icon buttons with tooltips.
     /// </summary>
     private void OnBodySizeChanged(object sender, SizeChangedEventArgs e)
     {
         var width = e.NewSize.Width;
-        var narrow = width < 620;
-        const double minSearch = 170, gap = 8;
-        bool Fits(double side) => width - 2 * (side + gap) >= minSearch;
-        bool toolLabels, actionLabels;
-        if (narrow)
-        {
-            // The search has its own row, so each side has the whole width to share.
-            toolLabels = width >= LabelledToolsWidth + 36 * 4 + 40;
-            actionLabels = width >= LabelledToolsWidth + LabelledActionsWidth + 16;
-            Search.Width = double.NaN;
-            Search.HorizontalAlignment = HorizontalAlignment.Stretch;
-            Grid.SetRow(Search, 1);
-            Grid.SetColumn(Search, 0);
-            Grid.SetColumnSpan(Search, 3);
-        }
-        else
-        {
-            toolLabels = Fits(LabelledToolsWidth);
-            actionLabels = toolLabels && Fits(Math.Max(LabelledToolsWidth, LabelledActionsWidth));
-            var side = Math.Max(toolLabels ? LabelledToolsWidth : 116, actionLabels ? LabelledActionsWidth : 180);
-            Search.Width = Math.Clamp(width - 2 * (side + gap), minSearch, 320);
-            Search.HorizontalAlignment = HorizontalAlignment.Center;
-            Grid.SetRow(Search, 0);
-            Grid.SetColumn(Search, 1);
-            Grid.SetColumnSpan(Search, 1);
-        }
+        var toolLabels = width >= LabelledToolsWidth + 200;
+        var actionLabels = width >= LabelledToolsWidth + LabelledActionsWidth + 24;
         foreach (var label in new[] { LabelFilter, LabelColumns })
             label.Visibility = toolLabels ? Visibility.Visible : Visibility.Collapsed;
         foreach (var label in new[] { LabelAdd, LabelPauseResume, LabelRemove })
             label.Visibility = actionLabels ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// The search keeps to the centre of the window; on narrow windows it narrows and the app's name
+    /// gives way to it. The window buttons (about 140 px) stay clear.
+    /// </summary>
+    private void OnTitleBarSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var width = e.NewSize.Width;
+        Search.Width = Math.Clamp(width - 2 * 230, 180, 420);
+        AppTitle.Visibility = width - Search.Width >= 2 * 200 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateTitleBarRegions();
+    }
+
+    private void OnSearchSizeChanged(object sender, SizeChangedEventArgs e) => UpdateTitleBarRegions();
+
+    /// <summary>The search takes clicks and typing; the rest of the title bar drags the window.</summary>
+    private void UpdateTitleBarRegions()
+    {
+        if (Search.XamlRoot is null || Search.ActualWidth <= 0) return;
+        var scale = Search.XamlRoot.RasterizationScale;
+        var box = Search.TransformToVisual(null).TransformBounds(new Windows.Foundation.Rect(0, 0, Search.ActualWidth, Search.ActualHeight));
+        var rect = new Windows.Graphics.RectInt32(
+            (int)Math.Round(box.X * scale), (int)Math.Round(box.Y * scale),
+            (int)Math.Round(box.Width * scale), (int)Math.Round(box.Height * scale));
+        Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(AppWindow.Id)
+            .SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Passthrough, [rect]);
     }
 
     /// <summary>The list's width decides which columns fit.</summary>
@@ -426,6 +441,17 @@ public sealed partial class MainWindow : Window
     private void OnShowInFolderClick(object sender, RoutedEventArgs e)
     {
         if (ItemOf(sender) is { } item) Shell.ShowInFolder(item.FilePath, item.SaveDir);
+    }
+
+    /// <summary>
+    /// Fetches the file again from the start. A finished file stays until the new copy is complete,
+    /// then the new one takes its name.
+    /// </summary>
+    private async void OnRedownloadClick(object sender, RoutedEventArgs e)
+    {
+        if (ItemOf(sender) is not { } item) return;
+        await Call(new { type = "redownload", id = item.Id });
+        if (ViewModel.AppSettings.ShowProgressWindow) App.Current?.ShowProgressWindow(item);
     }
 
     private async void OnItemPauseResumeClick(object sender, RoutedEventArgs e)

@@ -13,7 +13,6 @@
 
     <Grid x:Name="Root">
         <Grid.Resources>
-            <!-- Column headers: flat text buttons that sort the list. -->
             <!-- Column headers: subtle buttons (no fill until hovered), like Fluent table headers. -->
             <Style x:Key="HeaderButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                 <Setter Property="Background" Value="Transparent" />
@@ -40,15 +39,25 @@
             </Style>
         </Grid.Resources>
         <Grid.RowDefinitions>
-            <RowDefinition Height="32" />
+            <RowDefinition Height="40" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid x:Name="AppTitleBar" Padding="12,0,0,0">
+        <!-- Title bar: the app's name on the left, search in the centre of the window (equal columns
+             either side), the window buttons' space on the right. The search is a passthrough region so
+             it takes clicks and typing while the rest of the bar drags the window. -->
+        <Grid x:Name="AppTitleBar" Padding="12,0,0,0" SizeChanged="OnTitleBarSizeChanged">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                 <Image Source="ms-appx:///Assets/app.png" Width="16" Height="16" />
-                <TextBlock Text="Open Download Manager" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                <TextBlock x:Name="AppTitle" Text="Open Download Manager" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
             </StackPanel>
+            <AutoSuggestBox x:Name="Search" Grid.Column="1" PlaceholderText="Search downloads (Ctrl+F)" Width="360" QueryIcon="Find"
+                            VerticalAlignment="Center" TextChanged="OnSearchChanged" SizeChanged="OnSearchSizeChanged" />
         </Grid>
 
         <NavigationView
@@ -114,8 +123,6 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <AutoSuggestBox x:Name="Search" Grid.Column="1" PlaceholderText="Search downloads" Width="240" QueryIcon="Find"
-                                    VerticalAlignment="Center" TextChanged="OnSearchChanged" />
                     <!-- Toolbar: subtle Fluent buttons. Labels hide when space is short, leaving
                          compact 36 px icon buttons with tooltips (see OnBodySizeChanged). -->
                     <StackPanel x:Name="Actions" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
@@ -226,18 +233,20 @@
                         </Button>
                         <!-- One click steps through the row densities; theme and the rest live in Settings. -->
                         <Button x:Name="DensityButton" Click="OnDensityToggle" AutomationProperties.Name="Row density">
-                            <FontIcon x:Name="DensityIcon" Glyph="&#xE8FD;" FontSize="16" />
+                            <!-- Rows drawn at the current density: four thin, three, or two thick. -->
+                            <Path x:Name="DensityIcon" Width="16" Height="16" Fill="{ThemeResource TextFillColorPrimaryBrush}" />
                         </Button>
                     </StackPanel>
                 </Grid>
 
                 <InfoBar x:Name="Info" Grid.Row="2" IsOpen="False" Severity="Error" IsClosable="True" />
 
-                <!-- Column headers, laid out like the rows below. A chevron marks the sorted column. -->
+                <!-- Column headers, laid out exactly like the rows below (same columns, widths and spacing,
+                     the checkbox and icon space in the name cell), so each title sits over its values.
+                     A chevron marks the sorted column. -->
                 <Grid x:Name="Header" Grid.Row="3" Padding="12,0,12,2" ColumnSpacing="12" BorderThickness="0,0,0,1"
                       BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="32" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
@@ -245,49 +254,60 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <!-- Checkboxes at 80%: 16 px boxes, quieter next to the file icons. -->
-                    <CheckBox x:Name="SelectAll" MinWidth="0" Padding="0" VerticalAlignment="Center" Click="OnSelectAllClick"
-                              ToolTipService.ToolTip="Check all" RenderTransformOrigin="0.5,0.5">
-                        <CheckBox.RenderTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8" /></CheckBox.RenderTransform>
-                    </CheckBox>
-                    <Button Grid.Column="1" Style="{StaticResource HeaderButton}" Tag="name" Click="OnSortClick" Margin="22,0,0,0">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Name" />
-                            <FontIcon x:Name="SortName" FontSize="10" Visibility="Collapsed" />
-                        </StackPanel>
-                    </Button>
-                    <Button Grid.Column="2" Width="130" Style="{StaticResource HeaderButton}" Tag="size" Click="OnSortClick"
-                            Visibility="{x:Bind services:ViewSettings.Current.SizeColumn, Mode=OneWay}">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Size" />
-                            <FontIcon x:Name="SortSize" FontSize="10" Visibility="Collapsed" />
-                        </StackPanel>
-                    </Button>
-                    <Button Grid.Column="3" Width="170" Style="{StaticResource HeaderButton}" Tag="progress" Click="OnSortClick"
-                            Margin="0" HorizontalContentAlignment="Center"
-                            Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Progress" />
-                            <FontIcon x:Name="SortProgress" FontSize="10" Visibility="Collapsed" />
-                        </StackPanel>
-                    </Button>
-                    <Button Grid.Column="4" Width="90" Style="{StaticResource HeaderButton}" Tag="speed" Click="OnSortClick"
-                            Visibility="{x:Bind services:ViewSettings.Current.SpeedColumn, Mode=OneWay}">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Speed" />
-                            <FontIcon x:Name="SortSpeed" FontSize="10" Visibility="Collapsed" />
-                        </StackPanel>
-                    </Button>
-                    <TextBlock Grid.Column="5" Width="80" Text="Time left" FontSize="12" VerticalAlignment="Center"
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <!-- Checkboxes at 80%: 16 px boxes, quieter next to the file icons. -->
+                        <CheckBox x:Name="SelectAll" MinWidth="0" Width="20" Padding="0" VerticalAlignment="Center" Click="OnSelectAllClick"
+                                  ToolTipService.ToolTip="Check all" RenderTransformOrigin="0.5,0.5">
+                            <CheckBox.RenderTransform><ScaleTransform ScaleX="0.8" ScaleY="0.8" /></CheckBox.RenderTransform>
+                        </CheckBox>
+                        <Border Grid.Column="1" Width="{x:Bind services:ViewSettings.Current.IconSize, Mode=OneWay}" />
+                        <Button Grid.Column="2" Style="{StaticResource HeaderButton}" Tag="name" Click="OnSortClick">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Name" />
+                                <FontIcon x:Name="SortName" FontSize="10" Visibility="Collapsed" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <Grid Grid.Column="1" Width="130" Visibility="{x:Bind services:ViewSettings.Current.SizeColumn, Mode=OneWay}">
+                        <Button Style="{StaticResource HeaderButton}" Tag="size" Click="OnSortClick" >
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Size" />
+                                <FontIcon x:Name="SortSize" FontSize="10" Visibility="Collapsed" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <Grid Grid.Column="2" Width="170" Visibility="{x:Bind services:ViewSettings.Current.ProgressColumn, Mode=OneWay}">
+                        <Button Style="{StaticResource HeaderButton}" Tag="progress" Click="OnSortClick" Margin="0" HorizontalContentAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Progress" />
+                                <FontIcon x:Name="SortProgress" FontSize="10" Visibility="Collapsed" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <Grid Grid.Column="3" Width="90" Visibility="{x:Bind services:ViewSettings.Current.SpeedColumn, Mode=OneWay}">
+                        <Button Style="{StaticResource HeaderButton}" Tag="speed" Click="OnSortClick" >
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Speed" />
+                                <FontIcon x:Name="SortSpeed" FontSize="10" Visibility="Collapsed" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <TextBlock Grid.Column="4" Width="80" Text="Time left" FontSize="12" VerticalAlignment="Center"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                Visibility="{x:Bind services:ViewSettings.Current.TimeLeftColumn, Mode=OneWay}" />
-                    <Button Grid.Column="6" Width="110" Style="{StaticResource HeaderButton}" Tag="added" Click="OnSortClick"
-                            Visibility="{x:Bind services:ViewSettings.Current.AddedColumn, Mode=OneWay}">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Added" />
-                            <FontIcon x:Name="SortAdded" FontSize="10" Visibility="Collapsed" />
-                        </StackPanel>
-                    </Button>
+                    <Grid Grid.Column="5" Width="110" Visibility="{x:Bind services:ViewSettings.Current.AddedColumn, Mode=OneWay}">
+                        <Button Style="{StaticResource HeaderButton}" Tag="added" Click="OnSortClick" >
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Added" />
+                                <FontIcon x:Name="SortAdded" FontSize="10" Visibility="Collapsed" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
                 </Grid>
 
                 <ListView
@@ -323,6 +343,9 @@
                                         <MenuFlyoutItem Text="{x:Bind PauseResumeText, Mode=OneWay}" Click="OnItemPauseResumeClick">
                                             <MenuFlyoutItem.Icon><FontIcon Glyph="{x:Bind PauseResumeGlyph, Mode=OneWay}" /></MenuFlyoutItem.Icon>
                                         </MenuFlyoutItem>
+                                        <MenuFlyoutItem Text="Download again" Click="OnRedownloadClick" Visibility="{x:Bind CanRedownload, Mode=OneWay}">
+                                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE896;" /></MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
                                         <MenuFlyoutItem Text="Refresh address" Icon="Refresh" Click="OnRefreshAddressClick" />
                                         <MenuFlyoutItem Text="Speed limit…" Click="OnItemSpeedLimitClick">
                                             <MenuFlyoutItem.Icon><FontIcon Glyph="&#xEC4A;" /></MenuFlyoutItem.Icon>
@@ -342,16 +365,19 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <!-- The row is the progress bar, as a dot matrix: lit dots up to the progress (accent,
-                                     amber when paused, red when failed), faint dots after, and a glow at the front
-                                     while bytes arrive. Views/RowFill.cs drives it; it fades out once done. -->
+                                     amber when paused, red when failed), faint dots after, and a band of brighter
+                                     dots sweeping across while bytes arrive. Views/RowFill.cs drives it; it fades
+                                     out once done. -->
                                 <Grid Grid.ColumnSpan="6" Margin="-12,3,-12,3" CornerRadius="4" IsHitTestVisible="False"
                                       Opacity="{x:Bind FillOpacity, Mode=OneWay}" Loaded="OnRowFillLoaded">
                                     <Grid.OpacityTransition>
                                         <ScalarTransition Duration="0:0:0.6" />
                                     </Grid.OpacityTransition>
                                     <Border />
-                                    <Border />
-                                    <Rectangle Width="120" HorizontalAlignment="Left" />
+                                    <Grid>
+                                        <Border Visibility="Collapsed" />
+                                        <Border Visibility="Collapsed" />
+                                    </Grid>
                                 </Grid>
                                 <Grid ColumnSpacing="10">
                                     <Grid.ColumnDefinitions>

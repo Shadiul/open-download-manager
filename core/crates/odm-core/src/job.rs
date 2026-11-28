@@ -13,6 +13,9 @@ pub enum JobState {
     Downloading,
     Paused,
     WaitingToRetry,
+    /// Every byte is in; the file is being put together (flushed and renamed, or for a video,
+    /// merged by ffmpeg).
+    Finishing,
     Completed,
     Failed,
 }
@@ -20,7 +23,7 @@ pub enum JobState {
 impl JobState {
     /// Whether the job is using a connection slot in its queue.
     pub fn is_active(self) -> bool {
-        matches!(self, Self::Connecting | Self::Downloading | Self::WaitingToRetry)
+        matches!(self, Self::Connecting | Self::Downloading | Self::WaitingToRetry | Self::Finishing)
     }
 
     /// Whether the job has stopped for good, until the user retries it.
@@ -84,6 +87,8 @@ pub struct Job {
     pub custom_name: bool,
     /// The user chose the folder; category folders do not apply.
     pub custom_dir: bool,
+    /// Downloading again: the earlier copy, replaced once the new one is complete.
+    pub replaces: Option<String>,
 }
 
 impl Default for Job {
@@ -115,6 +120,7 @@ impl Default for Job {
             awaiting_confirmation: false,
             custom_name: false,
             custom_dir: false,
+            replaces: None,
         }
     }
 }

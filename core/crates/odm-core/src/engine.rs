@@ -105,6 +105,8 @@ pub struct Transfer {
     pub throttled: AtomicU32,
     /// This download's own speed limit; the manager can change it while it runs.
     pub job_limit: RateLimiter,
+    /// Every byte is in and the file is being put together.
+    pub finishing: AtomicBool,
 }
 
 impl Transfer {
@@ -454,6 +456,7 @@ async fn run_once(
     if !job.segments.iter().all(SegmentRow::is_done) {
         return fail("The download stopped before the file was complete".into());
     }
+    transfer.finishing.store(true, Ordering::Relaxed);
     if let Err(e) = file.sync_all() {
         return fail(format!("Cannot save the file: {e}"));
     }
