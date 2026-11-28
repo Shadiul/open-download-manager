@@ -1,8 +1,6 @@
-﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="155 134 792 792" width="1024" height="1024">
-  <!-- The app icon (40 px and up). The tile is drawn at 82% (the transforms on it and on v3_sqClip), so the
-       globe and rocket stand large and the rocket breaks out of it; the frame is square and tight around
-       everything drawn, nothing cut off and no padding (refit it if the artwork moves). render-icon.ps1 makes the 32 px and
-       smaller sizes from it too: the group id="tile" is dropped and the frame fitted to what is left. -->
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="72 66 880 880" width="1024" height="1024">
+  <!-- The app icon (40 px and up). Framed tighter than its 1024 canvas (the tile is 100-924) so the tile
+       fills a Windows icon like Fluent app icons do; icon-small.svg is drawn for 32 px and below. -->
   <defs>
     
     <linearGradient id="v3_bgBase" x1="16%" y1="4%" x2="84%" y2="96%">
@@ -120,7 +118,7 @@
     </filter>
 
     <clipPath id="v3_sqClip">
-      <path transform="translate(512 512) scale(0.82) translate(-512 -512)" d="M 336 100 L 688 100 C 784 100, 840 100, 882 142 C 924 184, 924 240, 924 336 L 924 688 C 924 784, 924 840, 882 882 C 840 924, 784 924, 688 924 L 336 924 C 240 924, 184 924, 142 882 C 100 840, 100 784, 100 688 L 100 336 C 100 240, 100 184, 142 142 C 184 100, 240 100, 336 100 Z" />
+      <path d="M 336 100 L 688 100 C 784 100, 840 100, 882 142 C 924 184, 924 240, 924 336 L 924 688 C 924 784, 924 840, 882 882 C 840 924, 784 924, 688 924 L 336 924 C 240 924, 184 924, 142 882 C 100 840, 100 784, 100 688 L 100 336 C 100 240, 100 184, 142 142 C 184 100, 240 100, 336 100 Z" />
     </clipPath>
     <clipPath id="v3_globeClip"><circle cx="0" cy="0" r="276" /></clipPath>
     <clipPath id="v3_rocketClip">
@@ -129,7 +127,7 @@
   </defs>
 
   
-  <g id="tile" transform="translate(512 512) scale(0.82) translate(-512 -512)" filter="url(#v3_sqShadow)">
+  <g filter="url(#v3_sqShadow)">
     <path d="M 336 100 L 688 100 C 784 100, 840 100, 882 142 C 924 184, 924 240, 924 336 L 924 688 C 924 784, 924 840, 882 882 C 840 924, 784 924, 688 924 L 336 924 C 240 924, 184 924, 142 882 C 100 840, 100 784, 100 688 L 100 336 C 100 240, 100 184, 142 142 C 184 100, 240 100, 336 100 Z" fill="url(#v3_bgBase)" />
     <g clip-path="url(#v3_sqClip)">
       <rect x="100" y="100" width="824" height="824" fill="url(#v3_bgSoftTint)" />
@@ -137,14 +135,14 @@
     <path d="M 336 101.5 L 688 101.5 C 783 101.5, 839 101.5, 880.8 143.2 C 922.5 185, 922.5 241, 922.5 336 L 922.5 688 C 922.5 783, 922.5 839, 880.8 880.8 C 839 922.5, 783 922.5, 688 922.5 L 336 922.5 C 241 922.5, 185 922.5, 143.2 880.8 C 101.5 839, 101.5 783, 101.5 688 L 101.5 336 C 101.5 241, 101.5 185, 143.2 143.2 C 185 101.5, 241 101.5, 336 101.5 Z" fill="none" stroke="url(#v3_bgRim)" stroke-width="3" />
   </g>
 
-  <g id="art" clip-path="url(#v3_sqClip)">
+  <g clip-path="url(#v3_sqClip)">
     
-    <g transform="translate(512 512) scale(0.968) translate(-488 -528)">
+    <g transform="translate(512 512) scale(1.1) translate(-488 -528)">
     <path d="M 215 738 A 354 88 -38 0 1 773 302" fill="none" stroke="url(#v3_trailBack)" stroke-width="17" stroke-linecap="round" />
     </g>
 
     
-    <g transform="translate(512, 512) scale(0.848)" filter="url(#v3_globeShadow)">
+    <g transform="translate(512, 512) scale(0.964)" filter="url(#v3_globeShadow)">
       <circle cx="0" cy="0" r="276" fill="url(#v3_globeOcean)" />
       <g clip-path="url(#v3_globeClip)">
         <g transform="rotate(-14)" fill="none" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="1.4">
@@ -192,7 +190,7 @@
     </g>
 
     
-    <g transform="translate(512 512) scale(0.968) translate(-488 -528)">
+    <g transform="translate(512 512) scale(1.1) translate(-488 -528)">
     <g filter="url(#v3_trailGlow)">
       <path d="M 577 547 A 344 74 -38 0 1 221 733 L 209 743 A 364 102 -38 0 0 595 569 Z" fill="url(#v3_trailFront)" />
     </g>
@@ -210,9 +208,9 @@
   </g>
 
   <!-- The rocket sits outside the tile's clip so its nose breaks out of the tile. -->
-  <g transform="translate(512 512) scale(0.968) translate(-488 -528)">
+  <g transform="translate(512 512) scale(1.1) translate(-488 -528)">
     
-    <g transform="translate(672, 486) rotate(50) scale(1.364) translate(0 146) scale(1.2) translate(0 -146)" filter="url(#v3_rocketShadow)">
+    <g transform="translate(693, 468) rotate(50) scale(0.96) translate(0 146) scale(1.2) translate(0 -146)" filter="url(#v3_rocketShadow)">
       <path d="M -48 28 C -98 50 -118 96 -108 150 C -84 126 -62 114 -32 112 Z" fill="url(#v3_finL)" />
       <path d="M -48 28 C -78 66 -92 102 -108 150 C -84 126 -62 114 -32 112 Z" fill="url(#v3_finS)" opacity="0.54" />
       <path d="M -48 30 C -92 52 -112 94 -105 144" fill="none" stroke="#FFB8B3" stroke-width="2.2" stroke-linecap="round" opacity="0.8" />

@@ -1,13 +1,14 @@
 ﻿# Renders the app icon from its SVG artwork into every size the project uses:
 #   Windows app:  windows/OpenDownloadManager/Assets/app.ico (16 to 256) and app.png (256)
-#                 windows/OpenDownloadManager/Assets/tray-light.ico and tray-dark.ico (16 to 48)
-#                 and the development copy's purple versions: app-dev.ico/.png, tray-dev-light/-dark.ico
+#                 windows/OpenDownloadManager/Assets/tray-light.ico and tray-dark.ico (16 to 48), and the
+#                 purple tray-dev-light.ico and tray-dev-dark.ico for development copies (AppPaths.IsDev)
 #   Extension:    extension/icons/16, 32, 48, 128 .png (the extension's own icon)
 #                 extension/icons/toolbar-light-16/32.png and toolbar-dark-16/32.png (toolbar button)
-#   README/macOS: scripts/icon/out/icon-1024.png
+#   README/macOS: scripts/icon/icon-master.png
+#   Smoke icon:   windows/OpenDownloadManager/Assets/app-smoke.ico and app-smoke.png (the second variant)
 #
-# icon.svg is the full artwork, used from 40 px up. The sizes of 32 px and below use the same artwork
-# without its tile, framed tight (see Small-Svg), so the globe and rocket fill the small sizes.
+# icon-master.png ("Orbit") and icon-smoke-master.png ("Smoke") are the colour artwork at every size: the
+# artwork renders cut out by cutout-master.py, scaled down with Lanczos (Lanczos.cs).
 # icon-mono.svg is the one-colour glyph for the tray and the browser toolbar, rendered twice: a dark
 # glyph for light taskbars and toolbars ("light"), a white one for dark ones ("dark").
 # All are rasterised by headless Microsoft Edge (or Chrome) on a transparent background, large,
@@ -75,79 +76,34 @@ function Write-Ico([string]$ico, [int[]]$sizes, [string]$prefix) {
     [IO.File]::WriteAllBytes($ico, $ms.ToArray())
 }
 
-# The development copy's colours: every saturated colour of the artwork turned 70 degrees round the
-# colour wheel, so the blue globe turns purple and stands apart from the installed app in the taskbar.
-function Dev-Colours([string]$svgText) {
-    [regex]::Replace($svgText, '#([0-9A-Fa-f]{6})(?![0-9A-Fa-f])', {
-        param($m)
-        $c = [Drawing.ColorTranslator]::FromHtml('#' + $m.Groups[1].Value)
-        $h = $c.GetHue(); $s = $c.GetSaturation(); $l = $c.GetBrightness()
-        if ($s -lt 0.15) { return $m.Value }
-        $h = ($h + 70) % 360
-        $q = if ($l -lt 0.5) { $l * (1 + $s) } else { $l + $s - $l * $s }; $p = 2 * $l - $q
-        $rgb = foreach ($t in ($h / 360 + 1 / 3), ($h / 360), ($h / 360 - 1 / 3)) {
-            if ($t -lt 0) { $t += 1 }; if ($t -gt 1) { $t -= 1 }
-            $v = if ($t -lt 1 / 6) { $p + ($q - $p) * 6 * $t } elseif ($t -lt 1 / 2) { $q } elseif ($t -lt 2 / 3) { $p + ($q - $p) * (2 / 3 - $t) * 6 } else { $p }
-            [int][Math]::Round($v * 255)
-        }
-        '#{0:X2}{1:X2}{2:X2}' -f $rgb[0], $rgb[1], $rgb[2]
-    })
-}
-
-# The tile-less artwork for 32 px and below: icon.svg without its group id="tile" or the tile's clip,
-# framed square and tight around what is drawn (nothing cut off, no padding), found from a wide rendering.
-function Small-Svg([string]$svgText, [string]$path) {
-    $art = [regex]::Replace($svgText, '(?s)<g id="tile".*?\n  </g>\r?\n', '')
-    $art = $art.Replace('<g id="art" clip-path="url(#v3_sqClip)">', '<g id="art">')
-    # Render a 1536-unit square around the 1024 canvas at 512 px (3 units a pixel) and find the drawn pixels.
-    Set-Content $path (([regex]'viewBox="[^"]*"').Replace($art, 'viewBox="-256 -256 1536 1536"', 1)) -Encoding utf8
-    $probe = Join-Path $out 'small-probe.png'
-    Remove-Item $probe -ErrorAction SilentlyContinue
-    Render-Svg $path 512 $probe
-    $bmp = [Drawing.Bitmap]::FromFile($probe)
-    $data = $bmp.LockBits((New-Object Drawing.Rectangle 0, 0, 512, 512), [Drawing.Imaging.ImageLockMode]::ReadOnly, [Drawing.Imaging.PixelFormat]::Format32bppArgb)
-    $bytes = New-Object byte[] (512 * 512 * 4)
-    [Runtime.InteropServices.Marshal]::Copy($data.Scan0, $bytes, 0, $bytes.Length)
-    $bmp.UnlockBits($data); $bmp.Dispose(); Remove-Item $probe
-    $x0 = 512; $y0 = 512; $x1 = -1; $y1 = -1
-    for ($i = 3; $i -lt $bytes.Length; $i += 4) {
-        if ($bytes[$i] -gt 8) {   # ignore the last faint edge of the shadows
-            $p = ($i - 3) / 4; $x = $p % 512; $y = [Math]::Floor($p / 512)
-            if ($x -lt $x0) { $x0 = $x }; if ($x -gt $x1) { $x1 = $x }; if ($y -lt $y0) { $y0 = $y }; if ($y -gt $y1) { $y1 = $y }
-        }
-    }
-    $side = 3 * [Math]::Max($x1 - $x0 + 1, $y1 - $y0 + 1)
-    $cx = -256 + 3 * ($x0 + $x1 + 1) / 2; $cy = -256 + 3 * ($y0 + $y1 + 1) / 2
-    $box = '{0:0.#} {1:0.#} {2:0.#} {2:0.#}' -f ($cx - $side / 2), ($cy - $side / 2), $side
-    Set-Content $path (([regex]'viewBox="[^"]*"').Replace($art, "viewBox=`"$box`"", 1)) -Encoding utf8
-}
-
 # ---- the colour icon: the app, its windows and taskbar button, the extension's own icon ----
-# Rendered twice: the everyday icon (app.ico, app.png) and the development copy's (app-dev.ico, app-dev.png).
-$icoSizes = 16, 20, 24, 32, 40, 48, 64, 96, 128, 256
-foreach ($variant in '', '-dev') {
-    $text = Get-Content (Join-Path $PSScriptRoot 'icon.svg') -Raw
-    if ($variant) { $text = Dev-Colours $text }
-    $fullSvg = Join-Path $out "icon$variant.svg"
-    $smallSvg = Join-Path $out "icon-small$variant.svg"
-    Set-Content $fullSvg $text -Encoding utf8
-    Small-Svg $text $smallSvg
-    $full = Join-Path $out "icon$variant-1024.png"
-    $small = Join-Path $out "icon-small$variant-512.png"
-    Render-Svg $fullSvg 1024 $full
-    Render-Svg $smallSvg 512 $small
-    # The tile-less artwork up to 32 px, the full icon above.
-    foreach ($s in $icoSizes) { Save-Size $(if ($s -le 32) { $small } else { $full }) $s (Join-Path $out "win$variant-$s.png") }
-    Copy-Item (Join-Path $out "win$variant-256.png") (Join-Path $assets "app$variant.png") -Force
-    Write-Ico (Join-Path $assets "app$variant.ico") $icoSizes "win$variant"
-    if (-not $variant) { foreach ($s in 16, 32, 48, 128) { Save-Size $(if ($s -le 32) { $small } else { $full }) $s (Join-Path $extIcons "$s.png") } }
+$full = Join-Path $PSScriptRoot 'icon-master.png'   # the Orbit cut-out, 1024 px
+# Every size, the taskbar's 16 to 32 px included, is the artwork scaled down (the user's choice over a
+# separate small drawing, so the taskbar matches the big icon).
+function Colour-Source([int]$size) { $full }
+# A PNG master is scaled with Lanczos, lightly sharpened up to 64 px; other sources with Save-Size.
+Add-Type -ReferencedAssemblies System.Drawing -Path (Join-Path $PSScriptRoot 'Lanczos.cs')
+function Save-Colour([string]$source, [int]$size, [string]$path) {
+    if ($source -like '*-master.png') { [OdmLanczos]::Resize($source, $size, $(if ($size -le 64) { 0.35 } else { 0 }), $path) }
+    else { Save-Size $source $size $path }
 }
-$full = Join-Path $out 'icon-1024.png'
+
+$icoSizes = 16, 20, 24, 32, 40, 48, 64, 96, 128, 256
+foreach ($s in $icoSizes) { Save-Colour (Colour-Source $s) $s (Join-Path $out "win-$s.png") }
+Copy-Item (Join-Path $out 'win-256.png') (Join-Path $assets 'app.png') -Force
+Write-Ico (Join-Path $assets 'app.ico') $icoSizes 'win'
+foreach ($s in 16, 32, 48, 128) { Save-Colour (Colour-Source $s) $s (Join-Path $extIcons "$s.png") }
+
+# The Smoke variant (app-smoke.ico, app-smoke.png), from its own artwork at every size.
+$smoke = Join-Path $PSScriptRoot 'icon-smoke-master.png'
+foreach ($s in $icoSizes) { Save-Colour $smoke $s (Join-Path $out "win-smoke-$s.png") }
+Copy-Item (Join-Path $out 'win-smoke-256.png') (Join-Path $assets 'app-smoke.png') -Force
+Write-Ico (Join-Path $assets 'app-smoke.ico') $icoSizes 'win-smoke'
 
 # ---- the one-colour icon: the tray and the browser toolbar, one set per theme ----
-# The development copy's tray glyph is purple instead (tray-dev-light.ico, tray-dev-dark.ico).
+# A development copy's tray glyph is purple instead (dev-light, dev-dark), so it stands apart from the
+# installed app's in the notification area.
 $mono = Get-Content (Join-Path $PSScriptRoot 'icon-mono.svg') -Raw
-$traySizes = 16, 20, 24, 32, 40, 48
 foreach ($theme in @(@('light', '#1A1A1A'), @('dark', '#FFFFFF'), @('dev-light', '#7A2BD9'), @('dev-dark', '#B98CFF'))) {
     $name = $theme[0]
     $svg = Join-Path $out "icon-mono-$name.svg"
@@ -155,10 +111,11 @@ foreach ($theme in @(@('light', '#1A1A1A'), @('dark', '#FFFFFF'), @('dev-light',
     $big = Join-Path $out "icon-mono-$name-512.png"
     Render-Svg $svg 512 $big
     # Tray: 16 px at 100% scale up to 32 at 200%, and 40/48 for 250/300%.
+    $traySizes = 16, 20, 24, 32, 40, 48
     foreach ($s in $traySizes) { Save-Size $big $s (Join-Path $out "tray-$name-$s.png") }
     Write-Ico (Join-Path $assets "tray-$name.ico") $traySizes "tray-$name"
     if ($name -notlike 'dev-*') { foreach ($s in 16, 32) { Save-Size $big $s (Join-Path $extIcons "toolbar-$name-$s.png") } }
 }
 
 Remove-Item $profile -Recurse -Force -ErrorAction SilentlyContinue
-Write-Host "Icons written: app.ico, app.png, tray-light.ico, tray-dark.ico, their -dev copies, extension\icons, $full"
+Write-Host "Icons written: app.ico, app.png, app-smoke.ico, app-smoke.png, tray-light.ico, tray-dark.ico, tray-dev-*.ico, extension\icons"
