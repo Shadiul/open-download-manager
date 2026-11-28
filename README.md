@@ -137,11 +137,22 @@ paste a link, **Pause all**, and what to do when everything is done.
 
 ### After a download
 
-<!-- Placeholder: complete-light/-dark.png show the completion window before its redesign; recapture once it is in dev. -->
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/complete-focus-dark.png">
+    <img src="docs/screenshots/complete-focus-light.png" width="520" alt="Download complete: the time taken and average speed, and the file as a card with its icon, name, type and size">
+  </picture>
+</p>
+
+When a download finishes, its window shows the file as a card: open it with Enter or a
+double-click, or drag it into another app or Explorer. The folder and the source link sit under it,
+each with a copy button, and the **⋯** menu has Open with, Copy file path, Copy download link,
+Download again and Delete file.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/complete-dark.png">
-    <img src="docs/screenshots/complete-light.png" width="440" alt="The completion screen: size, time taken and average speed, with Open, Show in folder and Close">
+    <img src="docs/screenshots/complete-light.png" width="440" alt="The finished download window with the file card, its folder and source, and Open, Show in folder and Close">
   </picture>
 </p>
 
