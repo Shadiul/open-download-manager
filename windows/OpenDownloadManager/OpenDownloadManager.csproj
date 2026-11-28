@@ -38,6 +38,11 @@
     <Content Include="Assets\app.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\tray-light.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\tray-dark.ico" CopyToOutputDirectory="PreserveNewest" />
+    <!-- A development copy's purple icons (AppPaths.IsDev). -->
+    <Content Include="Assets\app-dev.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\app-dev.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\tray-dev-light.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\tray-dev-dark.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Windows App SDK's AI and machine-learning parts (onnxruntime, DirectML and their projections),

@@ -23,14 +23,25 @@ public static class Log
 
 public static class AppPaths
 {
-    public const string AppName = "Open Download Manager";
-
     /// <summary>
     /// For development: ODM_PROFILE=name runs a separate copy with its own data, its own browser
     /// endpoint, and no browser or Windows registration, next to the everyday one.
     /// </summary>
     public static string? Profile { get; } =
         Environment.GetEnvironmentVariable("ODM_PROFILE") is { Length: > 0 } p && p.All(char.IsLetterOrDigit) ? p : null;
+
+    /// <summary>
+    /// A Debug build or a profile copy: it shows a purple icon and "(Dev)" or "(profile)" in its titles,
+    /// so it can't be mistaken for the installed app running next to it.
+    /// </summary>
+#if DEBUG
+    public static bool IsDev => true;
+#else
+    public static bool IsDev => Profile is not null;
+#endif
+
+    /// <summary>The app's name, with " (Dev)" or " (profile)" after it in a development copy.</summary>
+    public static string AppName { get; } = "Open Download Manager" + (IsDev ? $" ({Profile ?? "Dev"})" : "");
 
     /// <summary>%LOCALAPPDATA%\OpenDownloadManager: the state database and app settings.</summary>
     public static string DataDir { get; } =
@@ -45,10 +56,17 @@ public static class AppPaths
 
     public static string AppExe { get; } = Path.Combine(AppDir, "OpenDownloadManager.exe");
 
-    public static string IconPath { get; } = Path.Combine(AppDir, "Assets", "app.ico");
+    // A development copy uses the purple -dev versions of the icons.
+    private static string Dev => IsDev ? "-dev" : "";
+
+    public static string IconPath { get; } = Path.Combine(AppDir, "Assets", $"app{Dev}.ico");
+
+    /// <summary>The 256 px icon, for the main window's title bar.</summary>
+    public static string IconPngPath { get; } = Path.Combine(AppDir, "Assets", $"app{Dev}.png");
 
     /// <summary>The one-colour tray icon: a dark glyph for a light taskbar, a white one for a dark taskbar.</summary>
-    public static string TrayIconPath(bool lightTaskbar) => Path.Combine(AppDir, "Assets", lightTaskbar ? "tray-light.ico" : "tray-dark.ico");
+    public static string TrayIconPath(bool lightTaskbar) =>
+        Path.Combine(AppDir, "Assets", $"tray{Dev}-{(lightTaskbar ? "light" : "dark")}.ico");
 
     /// <summary>The user's Downloads folder, wherever they moved it.</summary>
     public static string DownloadsDir { get; } = Profile is null ? KnownDownloads() : Path.Combine(DataDir, "Downloads");

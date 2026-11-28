@@ -53,7 +53,7 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <Image Source="ms-appx:///Assets/app.png" Width="16" Height="16" />
+                <Image x:Name="AppLogo" Source="ms-appx:///Assets/app.png" Width="16" Height="16" />
                 <TextBlock x:Name="AppTitle" Text="Open Download Manager" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
             </StackPanel>
             <AutoSuggestBox x:Name="Search" Grid.Column="1" PlaceholderText="Search downloads (Ctrl+F)" Width="360" QueryIcon="Find"

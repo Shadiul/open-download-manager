@@ -40,6 +40,11 @@ public sealed partial class MainWindow : Window
         // The caption buttons at their standard height, matching the 32 px title row.
         AppWindow.TitleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Standard;
         AppWindow.SetIcon(AppPaths.IconPath);
+        if (AppPaths.IsDev)
+        {
+            Title = AppTitle.Text = AppPaths.AppName;
+            AppLogo.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(AppPaths.IconPngPath));
+        }
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 700));
         if (AppWindow.Presenter is OverlappedPresenter p)
         {
