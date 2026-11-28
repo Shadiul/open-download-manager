@@ -111,7 +111,7 @@ public static class RowFill
         private readonly Grid _lit;
         private readonly Compositor _compositor;
         private readonly InsetClip _clip, _wideClip, _coreClip;
-        private readonly CompositionPropertySet _sweep;
+        private readonly CompositionPropertySet _sweep, _pass2;
         private readonly CompositionEasingFunction _ease;
         private DownloadItem? _item;
         private bool _placed, _live, _sweeping;
@@ -134,8 +134,19 @@ public static class RowFill
             _sweep = _compositor.CreatePropertySet();
             _sweep.InsertScalar("X", -Band);
             _sweep.InsertScalar("W", 0);
+            // P runs 0 to 1 over a pass; E carries the band past the end while finishing.
+            _pass2 = _compositor.CreatePropertySet();
+            _pass2.InsertScalar("P", 0);
+            _pass2.InsertScalar("E", 0);
             _wideClip = Band2Clip(_wide, Band);
             _coreClip = Band2Clip(_core, Core);
+            // The band heads for the progress front as it is at every frame (the lit part's clip),
+            // not as it was when the pass began, so it always arrives at the front.
+            var follow = _compositor.CreateExpressionAnimation($"Lerp({-Band / 2}, s.W - c.RightInset + p.E, p.P)");
+            follow.SetReferenceParameter("s", _sweep);
+            follow.SetReferenceParameter("c", _clip);
+            follow.SetReferenceParameter("p", _pass2);
+            _sweep.StartAnimation("X", follow);
 
             root.DataContextChanged += (_, _) => Bind();
             root.SizeChanged += (_, _) => { Paint(); Place(animate: false); Sweep(); };
@@ -183,6 +194,8 @@ public static class RowFill
             _placed = false;
             Paint();
             Place(animate: false);
+            // A recycled row shows another download: its band starts over.
+            StopSweep();
             Sweep();
         }
 
@@ -190,6 +203,8 @@ public static class RowFill
         {
             if (e.PropertyName == nameof(DownloadItem.FillScale)) Place(animate: true);
             else if (e.PropertyName == nameof(DownloadItem.FillBrush)) { Paint(); Place(animate: false); Sweep(); }
+            // Queued or connecting to downloading keeps the same colour, but the sweep must start.
+            else if (e.PropertyName == nameof(DownloadItem.State)) { Paint(); Sweep(); }
         }
 
         private Color StateColor => _item?.State switch
@@ -237,12 +252,14 @@ public static class RowFill
         }
 
         /// <summary>How fast the band travels, in view pixels per second.</summary>
-        private const double SweepSpeed = 180;
+        private const double SweepSpeed = 110;
 
         /// <summary>
-        /// While the download runs, the band travels from the start of the row to the progress front,
-        /// rests a moment, and goes again. Each pass is measured to the front as it is then, so the band
-        /// always reaches the end of the lit part, at the same unhurried speed however long it is.
+        /// While the download runs, the band travels from the start of the row to the progress front
+        /// (following the front as it moves), rests there while it fades, and goes again.
+        /// Progress updates arrive several times a second; they must not restart a pass that is under
+        /// way, or the band never gets far from the start. Only starting, stopping or a change between
+        /// downloading and finishing starts a new pass.
         /// </summary>
         private void Sweep()
         {
@@ -250,6 +267,9 @@ public static class RowFill
             var running = _item?.State is "downloading" or "finishing" && width > 0 && _live;
             if (!running) { StopSweep(); return; }
             _sweep.InsertScalar("W", width);
+            var finishing = _item!.State == "finishing";
+            if (_sweeping && finishing == _sweepFinishing) return;
+            _sweepFinishing = finishing;
             _wide.Visibility = _core.Visibility = Visibility.Visible;
             _sweeping = true;
             _pass++;
@@ -257,34 +277,36 @@ public static class RowFill
         }
 
         private int _pass;
+        private bool _sweepFinishing;
 
         private void StartPass(int pass)
         {
             if (!_sweeping || pass != _pass || _item is null) return;
             var width = (float)_root.ActualWidth;
             var front = (float)(width * Math.Clamp(_item.FillScale.X, 0, 1));
-            // From just before the row's start to the front, where the band ends half past it.
+            // Finishing: the band runs the whole row and off its end, a little quicker, without resting.
             var finishing = _item.State == "finishing";
-            var from = -Band / 2;
-            // Finishing: the band runs the whole row, quicker and without resting, until it is done.
-            var to = finishing ? width + Band / 2 : front;
-            var moving = Math.Max(0.6, (to - from) / (finishing ? SweepSpeed * 2.2 : SweepSpeed));
-            var rest = finishing ? 0.05 : 0.7;
+            _pass2.InsertScalar("E", finishing ? Band / 2 : 0);
+            var distance = (finishing ? width + Band : front + Band / 2);
+            var moving = Math.Clamp(distance / (finishing ? SweepSpeed * 1.6 : SweepSpeed), 1.6, 6.0);
+            // The band rests at the front while it fades, then the next pass starts from the left.
+            var rest = finishing ? 0.1 : 1.4;
+            var arrive = (float)(moving / (moving + rest));
             var travel = _compositor.CreateScalarKeyFrameAnimation();
-            travel.InsertKeyFrame(0f, from);
-            travel.InsertKeyFrame((float)(moving / (moving + rest)), to, _compositor.CreateCubicBezierEasingFunction(new Vector2(0.4f, 0f), new Vector2(0.6f, 1f)));
-            travel.InsertKeyFrame(1f, to);
+            travel.InsertKeyFrame(0f, 0f);
+            travel.InsertKeyFrame(arrive, 1f, _compositor.CreateCubicBezierEasingFunction(new Vector2(0.3f, 0f), new Vector2(0.7f, 1f)));
+            travel.InsertKeyFrame(1f, 1f);
             travel.Duration = TimeSpan.FromSeconds(moving + rest);
-            // The band fades in at the start and out at the front rather than popping.
+            // Fades in at the start, stays bright all the way to the front, then fades out there.
             var fade = _compositor.CreateScalarKeyFrameAnimation();
             fade.InsertKeyFrame(0f, 0f);
-            fade.InsertKeyFrame((float)(0.15 * moving / (moving + rest)), 1f);
-            fade.InsertKeyFrame((float)(0.85 * moving / (moving + rest)), 1f);
-            fade.InsertKeyFrame((float)(moving / (moving + rest)), 0f);
+            fade.InsertKeyFrame(0.12f * arrive, 1f);
+            fade.InsertKeyFrame(arrive, 1f);
+            fade.InsertKeyFrame(finishing ? 1f : Math.Min(1f, arrive + (float)(0.7 / (moving + rest))), 0f);
             fade.InsertKeyFrame(1f, 0f);
             fade.Duration = travel.Duration;
             var batch = _compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
-            _sweep.StartAnimation("X", travel);
+            _pass2.StartAnimation("P", travel);
             ElementCompositionPreview.GetElementVisual(_wide).StartAnimation("Opacity", fade);
             ElementCompositionPreview.GetElementVisual(_core).StartAnimation("Opacity", fade);
             batch.End();
@@ -295,8 +317,8 @@ public static class RowFill
         {
             if (!_sweeping && _wide.Visibility == Visibility.Collapsed) return;
             _pass++;
-            _sweep.StopAnimation("X");
-            _sweep.InsertScalar("X", -Band);
+            _pass2.StopAnimation("P");
+            _pass2.InsertScalar("P", 0);
             _wide.Visibility = _core.Visibility = Visibility.Collapsed;
             _sweeping = false;
         }

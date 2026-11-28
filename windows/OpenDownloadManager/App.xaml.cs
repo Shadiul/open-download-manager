@@ -183,7 +183,7 @@ public partial class App : Application
     {
         var menu = new MenuFlyout();
         menu.Items.Add(Item("Open Open Download Manager", ShowWindow));
-        menu.Items.Add(Item("Add downloadâ€¦", () => { ShowWindow(); _window?.OpenAddDialog(null); }));
+        menu.Items.Add(Item("Add download…", () => { ShowWindow(); _window?.OpenAddDialog(null); }));
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Item("Pause all", () => _ = _core?.CallAsync(new { type = "pauseAll" })));
         menu.Items.Add(Item("Resume all", () => _ = _core?.CallAsync(new { type = "resumeAll" })));

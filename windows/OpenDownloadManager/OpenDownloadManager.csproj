@@ -5,7 +5,7 @@
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>OpenDownloadManager</RootNamespace>
     <AssemblyName>OpenDownloadManager</AssemblyName>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
