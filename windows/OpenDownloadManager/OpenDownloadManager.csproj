@@ -43,6 +43,8 @@
     <Content Include="Assets\app-smoke.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\tray-smoke-light.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\tray-smoke-dark.ico" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The welcome steps' illustrations (scripts\welcome\cutout-welcome.py); not their source sheets. -->
+    <Content Include="Assets\welcome\*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Windows App SDK's AI and machine-learning parts (onnxruntime, DirectML and their projections),

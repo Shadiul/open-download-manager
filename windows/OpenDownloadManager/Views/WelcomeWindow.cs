@@ -227,6 +227,31 @@ public sealed class WelcomeWindow : ToolWindow
         Height = size,
     };
 
+    /// <summary>
+    /// A step's illustration (Assets\welcome, cut out by scripts\welcome\cutout-welcome.py), straight
+    /// on the window in light and dark. It fades and grows in when a step opens, unless animations are off.
+    /// </summary>
+    private static Grid StepArt(string name, double size)
+    {
+        var image = new Image
+        {
+            Source = new BitmapImage(new Uri(System.IO.Path.Combine(AppPaths.AppDir, "Assets", "welcome", name + ".png"))) { DecodePixelWidth = (int)Math.Ceiling(size * 3) },
+            Width = size,
+            Height = size,
+        };
+        var art = new Grid { Width = size, Height = size, VerticalAlignment = VerticalAlignment.Top, Children = { image } };
+        if (Motion)
+        {
+            var t = Transform(art);
+            var sb = new Storyboard();
+            Add(sb, art, "Opacity", 0, 1, 450);
+            Add(sb, t, nameof(CompositeTransform.ScaleX), 0.9, 1, 600);
+            Add(sb, t, nameof(CompositeTransform.ScaleY), 0.9, 1, 600);
+            sb.Begin();
+        }
+        return art;
+    }
+
     // ----- screens -----
 
     private void Show(int step)
@@ -344,15 +369,13 @@ public sealed class WelcomeWindow : ToolWindow
         return panel;
     }
 
-    /// <summary>The glyph tile, "Step n of 4" and the question, with an optional line under it.</summary>
-    private static StackPanel Head(int step, string glyph, string question, string? detail)
+    /// <summary>The step's illustration, "Step n of 4" and the question, with an optional line under it.</summary>
+    private static StackPanel Head(int step, string art, string question, string? detail)
     {
-        var grid = new Grid { ColumnSpacing = 16 };
+        var grid = new Grid { ColumnSpacing = 20 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var tile = Tile(glyph, 48, 12, 22);
-        tile.VerticalAlignment = VerticalAlignment.Top;
-        grid.Children.Add(tile);
+        grid.Children.Add(StepArt(art, 96));
         var words = new StackPanel
         {
             VerticalAlignment = VerticalAlignment.Center,
@@ -534,7 +557,7 @@ public sealed class WelcomeWindow : ToolWindow
         note.Children.Add(new FontIcon { Glyph = "", FontSize = 14, Style = ThemedStyles.Get("FontIcon", null, ("Foreground", "TextFillColorSecondaryBrush")) });
         note.Children.Add(Text("The accent colour, window material and row style are in Settings, under Appearance.", caption: true, secondary: true));
 
-        return Body(new StackPanel { Children = { Head(1, "", "How should it look?", null), cards, note } });
+        return Body(new StackPanel { Children = { Head(1, "look", "How should it look?", null), cards, note } });
     }
 
     private static void Outline(Border card, bool selected)
@@ -654,7 +677,7 @@ public sealed class WelcomeWindow : ToolWindow
         {
             Children =
             {
-                Head(2, "", "Where should downloads go?", "Every download is saved here, unless you choose another folder for it."),
+                Head(2, "folder", "Where should downloads go?", "Every download is saved here, unless you choose another folder for it."),
                 folderCard,
                 startupCard,
             },
@@ -725,7 +748,7 @@ public sealed class WelcomeWindow : ToolWindow
         {
             Children =
             {
-                Head(3, "", "Catch downloads from your browser", "The extension comes with the app. Add it, and the files and videos you download in that browser come here."),
+                Head(3, "browsers", "Catch downloads from your browser", "The extension comes with the app. Add it, and the files and videos you download in that browser come here."),
                 list,
                 note,
             },
@@ -841,33 +864,7 @@ public sealed class WelcomeWindow : ToolWindow
     // Ready: a short lift-off, what was chosen (each with a way back), and one tip.
     private ScrollViewer ReadyScreen()
     {
-        var glow = new Ellipse { Width = 100, Height = 100, Margin = new Thickness(-14), IsHitTestVisible = false };
-        Repaint(() =>
-        {
-            var a = ThemeColors.AccentShade(UIColorType.Accent);
-            glow.Fill = new RadialGradientBrush
-            {
-                GradientStops =
-                {
-                    new GradientStop { Color = WithAlpha(a, 0x50), Offset = 0 },
-                    new GradientStop { Color = WithAlpha(a, 0), Offset = 1 },
-                },
-            };
-        });
-        var art = AppArt(72);
-        var launch = new Grid { Width = 72, Height = 72, Children = { glow, art } };
-        if (Motion)
-        {
-            var t = Transform(art);
-            var sb = new Storyboard();
-            Add(sb, art, "Opacity", 0, 1, 500);
-            Add(sb, t, nameof(CompositeTransform.TranslateX), -10, 0, 900);
-            Add(sb, t, nameof(CompositeTransform.TranslateY), 18, 0, 900);
-            Add(sb, t, nameof(CompositeTransform.ScaleX), 0.85, 1, 900);
-            Add(sb, t, nameof(CompositeTransform.ScaleY), 0.85, 1, 900);
-            Add(sb, glow, "Opacity", 0, 1, 1000);
-            sb.Begin();
-        }
+        var launch = StepArt("ready", 96);
         var title = new StackPanel
         {
             VerticalAlignment = VerticalAlignment.Center,
@@ -878,7 +875,7 @@ public sealed class WelcomeWindow : ToolWindow
                 Text("Here's how it's set up. You can change any of it later in Settings.", secondary: true),
             },
         };
-        var head = new Grid { ColumnSpacing = 16, Margin = new Thickness(0, 0, 0, 8) };
+        var head = new Grid { ColumnSpacing = 20, Margin = new Thickness(0, 0, 0, 8) };
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         head.Children.Add(launch);
