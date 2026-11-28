@@ -35,7 +35,16 @@ public sealed class WelcomeWindow : ToolWindow
         VerticalContentAlignment = VerticalAlignment.Stretch,
         IsTabStop = false,
     };
-    private readonly Grid _footer = new() { Padding = new Thickness(28, 14, 24, 20), ColumnSpacing = 8 };
+    // One spacing scale (4/8/12/16/24/32) and one left edge for every screen. The footer's Skip
+    // button is pulled left by its own 11 px padding so its text lines up with the content.
+    private const double Edge = 32;
+    private readonly Grid _footer = new()
+    {
+        Padding = new Thickness(Edge - 11, 16, Edge, 20),
+        ColumnSpacing = 16,
+        BorderThickness = new Thickness(0, 1, 0, 0),
+        Style = ThemedStyles.Get("Grid", null, ("BorderBrush", "CardStrokeColorDefaultBrush"), ("Background", "CardBackgroundFillColorSecondaryBrush")),
+    };
     private readonly Rectangle _tint = new() { IsHitTestVisible = false };
     private readonly List<Action> _repaint = []; // for the screen on show; cleared when it changes
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _poll;
@@ -264,7 +273,7 @@ public sealed class WelcomeWindow : ToolWindow
         Grid.SetColumn(right, 2);
         _footer.Children.Add(right);
 
-        if (_step < Steps)
+        // On the last screen Skip is kept invisible, so the bars stay where they were.
         {
             var skip = new Button
             {
@@ -274,6 +283,13 @@ public sealed class WelcomeWindow : ToolWindow
                 Style = ThemedStyles.Get("Button", "DefaultButtonStyle", ("Foreground", "TextFillColorSecondaryBrush")),
             };
             skip.Click += (_, _) => Finish();
+            if (_step == Steps)
+            {
+                skip.Opacity = 0;
+                skip.IsHitTestVisible = false;
+                skip.IsTabStop = false;
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(skip, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+            }
             _footer.Children.Add(skip);
         }
 
@@ -334,10 +350,13 @@ public sealed class WelcomeWindow : ToolWindow
         var grid = new Grid { ColumnSpacing = 16 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.Children.Add(Tile(glyph, 48, 12, 22));
+        var tile = Tile(glyph, 48, 12, 22);
+        tile.VerticalAlignment = VerticalAlignment.Top;
+        grid.Children.Add(tile);
         var words = new StackPanel
         {
             VerticalAlignment = VerticalAlignment.Center,
+            Spacing = 2,
             Children =
             {
                 new TextBlock { Text = $"Step {step} of {Steps}", FontSize = 12, FontWeight = FontWeights.SemiBold, Style = AccentText() },
@@ -353,18 +372,23 @@ public sealed class WelcomeWindow : ToolWindow
                 },
             },
         };
+        if (detail is not null)
+        {
+            var line = Text(detail, secondary: true);
+            line.Margin = new Thickness(0, 4, 0, 0);
+            words.Children.Add(line);
+        }
         Grid.SetColumn(words, 1);
         grid.Children.Add(words);
-        var head = new StackPanel { Spacing = 8, Children = { grid } };
-        if (detail is not null) head.Children.Add(Text(detail, secondary: true));
-        return head;
+        // 16 between children plus 8 here: the header sits 24 above the first card.
+        return new StackPanel { Margin = new Thickness(0, 0, 0, 8), Children = { grid } };
     }
 
     /// <summary>A screen's body: scrolls if a long browser list needs it.</summary>
     private static ScrollViewer Body(StackPanel content)
     {
-        content.Padding = new Thickness(40, 16, 40, 8);
-        content.Spacing = 18;
+        content.Padding = new Thickness(Edge, 24, Edge, 24);
+        content.Spacing = 16;
         Stagger(content);
         return new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollMode = ScrollMode.Disabled };
     }
@@ -426,14 +450,14 @@ public sealed class WelcomeWindow : ToolWindow
             HorizontalAlignment = HorizontalAlignment.Center,
             TextAlignment = TextAlignment.Center,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 14, 0, 0),
+            Margin = new Thickness(0, 16, 0, 0),
             Style = ThemedStyles.Text(),
         };
         var line = Text("A free, open-source download manager for Windows. Let's set it up: four quick steps.", secondary: true);
         line.HorizontalAlignment = HorizontalAlignment.Center;
         line.TextAlignment = TextAlignment.Center;
 
-        var feats = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 14, 0, 0) };
+        var feats = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 16, 0, 0) };
         foreach (var (glyph, text) in new[] { ("", "Pause and resume"), ("", "Videos from the sites you use"), ("", "Browser downloads") })
         {
             var dot = Tile(glyph, 22, 11, 11);
@@ -441,16 +465,16 @@ public sealed class WelcomeWindow : ToolWindow
             feats.Children.Add(new Border
             {
                 Child = chip,
-                Padding = new Thickness(5, 4, 10, 4),
+                Padding = new Thickness(4, 4, 12, 4),
                 CornerRadius = new CornerRadius(14),
                 BorderThickness = new Thickness(1),
                 Style = ThemedStyles.Card(),
             });
         }
 
-        var words = new StackPanel { Spacing = 6, Children = { title, line, feats } };
+        var words = new StackPanel { Spacing = 8, Children = { title, line, feats } };
         Stagger(words);
-        var screen = new Grid { VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(32, 8, 32, 0) };
+        var screen = new Grid { VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(Edge, 0, Edge, 8) };
         screen.Children.Add(new StackPanel { Children = { hero, words } });
 
         if (Motion)
@@ -495,9 +519,9 @@ public sealed class WelcomeWindow : ToolWindow
             radios.Add(radio);
             var outline = new Border
             {
-                Padding = new Thickness(8, 8, 8, 4),
+                Padding = new Thickness(8),
                 CornerRadius = new CornerRadius(10),
-                Child = new StackPanel { Spacing = 6, Children = { MiniWindow(i), radio } },
+                Child = new StackPanel { Spacing = 8, Children = { MiniWindow(i), radio } },
             };
             outline.Tapped += (_, _) => radio.IsChecked = true;
             Outline(outline, ThemeIndex == i);
@@ -594,11 +618,11 @@ public sealed class WelcomeWindow : ToolWindow
         var change = new Button { Content = "Change…", VerticalAlignment = VerticalAlignment.Center };
         var path = new TextBlock { Text = _folder, FontSize = 15, Style = ThemedStyles.Text(), TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis };
         ToolTipService.SetToolTip(path, _folder);
-        var info = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 6, Children = { path } };
+        var info = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 8, Children = { path } };
         if (FreeSpace(_folder) is var (free, total))
         {
             var used = total > 0 ? Math.Clamp(1 - (double)free / total, 0, 1) : 0;
-            var bar = new Grid { Height = 4, MaxWidth = 260, HorizontalAlignment = HorizontalAlignment.Stretch, CornerRadius = new CornerRadius(2) };
+            var bar = new Grid { Height = 4, HorizontalAlignment = HorizontalAlignment.Stretch, CornerRadius = new CornerRadius(2) };
             bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(used, GridUnitType.Star) });
             bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - used, GridUnitType.Star) });
             var track = new Border { Style = ThemedStyles.Get("Border", null, ("Background", "ControlStrongFillColorDisabledBrush")) };
@@ -609,7 +633,7 @@ public sealed class WelcomeWindow : ToolWindow
             info.Children.Add(Text($"{Size(free)} free of {Size(total)}", caption: true, secondary: true));
         }
         change.Click += async (_, _) => { if (await PickFolder()) Show(2); };
-        var folderCard = Card(Row(Tile("", 44, 10, 20), info, change), new Thickness(16));
+        var folderCard = Card(Row(Tile("", 40, 8, 18), info, change), new Thickness(16));
 
         var startup = new ToggleSwitch { IsOn = _settings.StartWithWindows, OnContent = "", OffContent = "", MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(startup, "Start with Windows");
@@ -621,10 +645,10 @@ public sealed class WelcomeWindow : ToolWindow
         var startupText = new StackPanel
         {
             VerticalAlignment = VerticalAlignment.Center,
-            Spacing = 2,
+            Spacing = 4,
             Children = { Text("Start with Windows"), Text("It waits in the tray, so a download from your browser always has somewhere to go.", caption: true, secondary: true) },
         };
-        var startupCard = Card(Row(Tile("", 44, 10, 20), startupText, startup), new Thickness(16, 16, 4, 16));
+        var startupCard = Card(Row(Tile("", 40, 8, 18), startupText, startup), new Thickness(16, 16, 4, 16));
 
         return Body(new StackPanel
         {
@@ -715,9 +739,9 @@ public sealed class WelcomeWindow : ToolWindow
         if (added) _waiting.Remove(browser.Id);
         var waiting = !added && _waiting.ContainsKey(browser.Id);
 
-        var icon = new Image { Width = 36, Height = 36 };
+        var icon = new Image { Width = 32, Height = 32 };
         _ = LoadIcon(icon, browser.Exe);
-        var iconBox = new Grid { Width = 36, Height = 36, VerticalAlignment = VerticalAlignment.Center, Children = { icon } };
+        var iconBox = new Grid { Width = 40, Height = 40, VerticalAlignment = VerticalAlignment.Center, Children = { icon } };
         if (added)
         {
             var badge = new Grid
@@ -726,7 +750,7 @@ public sealed class WelcomeWindow : ToolWindow
                 Height = 18,
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(0, 0, -4, -4),
+                Margin = new Thickness(0, 0, -3, -3),
                 Children =
                 {
                     new Ellipse { Style = ThemedStyles.Get("Ellipse", null, ("Fill", "SolidBackgroundFillColorBaseBrush")), Margin = new Thickness(-2) },
@@ -748,7 +772,7 @@ public sealed class WelcomeWindow : ToolWindow
         var sub = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         if (waiting) sub.Children.Add(new ProgressRing { IsActive = true, Width = 12, Height = 12, MinWidth = 0, MinHeight = 0 });
         sub.Children.Add(Text(added ? $"Downloads from {shortName} come here" : waiting ? $"Waiting for {shortName}… finish the two steps in the guide" : "Not added yet", caption: true, secondary: true));
-        var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 2, Children = { Text(browser.Name), sub } };
+        var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 4, Children = { Text(browser.Name), sub } };
 
         FrameworkElement right;
         if (added)
@@ -758,7 +782,7 @@ public sealed class WelcomeWindow : ToolWindow
                 Orientation = Orientation.Horizontal,
                 Spacing = 6,
                 MinWidth = 96,
-                Margin = new Thickness(0, 0, 8, 0),
+                Margin = new Thickness(0, 0, 12, 0),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
                 Children =
@@ -781,7 +805,7 @@ public sealed class WelcomeWindow : ToolWindow
             right = button;
         }
 
-        var row = Card(Row(iconBox, words, right), new Thickness(16, 12, 14, 12));
+        var row = Card(Row(iconBox, words, right), new Thickness(16));
         row.Tag = browser.Id;
         if (added) row.BorderBrush = ThemeColors.Brush(() => ThemeColors.Success, "success", 0x70);
         return row;
@@ -847,14 +871,14 @@ public sealed class WelcomeWindow : ToolWindow
         var title = new StackPanel
         {
             VerticalAlignment = VerticalAlignment.Center,
-            Spacing = 2,
+            Spacing = 4,
             Children =
             {
                 new TextBlock { Text = "You're ready to go", FontFamily = new FontFamily("Segoe UI Variable Display"), FontSize = 28, FontWeight = FontWeights.SemiBold, Style = ThemedStyles.Text() },
                 Text("Here's how it's set up. You can change any of it later in Settings.", secondary: true),
             },
         };
-        var head = new Grid { ColumnSpacing = 18 };
+        var head = new Grid { ColumnSpacing = 16, Margin = new Thickness(0, 0, 0, 8) };
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         head.Children.Add(launch);
@@ -876,7 +900,7 @@ public sealed class WelcomeWindow : ToolWindow
             change.Click += (_, _) => Show(step);
             var row = Row(check, text, change);
             row.ColumnSpacing = 12;
-            var cell = new Border { Child = row, Padding = new Thickness(16, 6, 8, 6) };
+            var cell = new Border { Child = row, Padding = new Thickness(16, 8, 10, 8) };
             if (summary.Children.Count > 0)
             {
                 cell.BorderThickness = new Thickness(0, 1, 0, 0);
@@ -903,7 +927,7 @@ public sealed class WelcomeWindow : ToolWindow
             {
                 new Border { CornerRadius = new CornerRadius(8), Opacity = 0.1, Style = ThemedStyles.Get("Border", null, ("Background", "AccentFillColorDefaultBrush")) },
                 new Border { CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), Opacity = 0.25, Style = ThemedStyles.Get("Border", null, ("BorderBrush", "AccentFillColorDefaultBrush")) },
-                new Border { Padding = new Thickness(14, 12, 14, 12), Child = tip },
+                new Border { Padding = new Thickness(16, 12, 16, 12), Child = tip },
             },
         };
 
