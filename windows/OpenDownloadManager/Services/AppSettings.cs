@@ -27,8 +27,17 @@ public sealed class AppSettings
     public string Accent { get; set; } = "system";
     /// <summary>mica, micaAlt, acrylic or solid.</summary>
     public string Backdrop { get; set; } = "mica";
-    /// <summary>dots, solid, glass, stripes, underline or none.</summary>
+    /// <summary>Before 0.3.2: one style for everything (dots, solid, glass, stripes, underline, none,
+    /// ring or bar). Read once to fill the four settings below when they are missing.</summary>
     public string ProgressStyle { get; set; } = "dots";
+    /// <summary>Progress across the row: bar, underline or none.</summary>
+    public string? RowProgress { get; set; }
+    /// <summary>The row's look: dots, solid, glass or stripes.</summary>
+    public string? RowLook { get; set; }
+    /// <summary>Progress in the Progress column: ring, bar or text.</summary>
+    public string? ColumnProgress { get; set; }
+    /// <summary>The column's look: dots, solid, glass or stripes.</summary>
+    public string? ColumnLook { get; set; }
     /// <summary>off, calm or lively: the band that sweeps along a downloading row.</summary>
     public string Animation { get; set; } = "calm";
     /// <summary>subtle, normal or vivid.</summary>
