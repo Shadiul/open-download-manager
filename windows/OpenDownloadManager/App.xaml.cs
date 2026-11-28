@@ -107,8 +107,10 @@ public partial class App : Application
         else if (!Environment.GetCommandLineArgs().Contains("--background"))
         {
             ShowWindow();
-            // The first start offers the extension to each browser (and a few choices).
-            if (!Settings.WelcomeDone) ShowWelcome();
+            // The first start offers the extension to each browser (and a few choices). The installer's
+            // "Set up the browser extension" starts the app with --setup-extension to get to that step.
+            var setupExtension = Environment.GetCommandLineArgs().Contains("--setup-extension");
+            if (!Settings.WelcomeDone || setupExtension) ShowWelcome(browsers: setupExtension);
         }
         // The extension in the data folder follows the copy shipped with this version of the app.
         _ = Task.Run(() => { try { BundledExtension.Sync(); } catch (Exception e) { Log.Error("extension sync", e); } });
@@ -116,7 +118,8 @@ public partial class App : Application
 
     private Views.WelcomeWindow? _welcome;
 
-    public void ShowWelcome()
+    /// <param name="browsers">Open on the browsers page, unless the welcome has never been done.</param>
+    public void ShowWelcome(bool browsers = false)
     {
         if (_core is null) return;
         if (_welcome is null)
@@ -124,6 +127,7 @@ public partial class App : Application
             _welcome = new Views.WelcomeWindow(_core, Settings);
             _welcome.Closed += (_, _) => _welcome = null;
         }
+        if (browsers && Settings.WelcomeDone) _welcome.ShowBrowsers();
         _welcome.ShowOnTop();
     }
 
@@ -143,6 +147,7 @@ public partial class App : Application
                 : "";
             if (launchArgs.Contains("--quit")) { Quit(); return; }
             if (!launchArgs.Contains("--background")) ShowWindow();
+            if (launchArgs.Contains("--setup-extension")) ShowWelcome(browsers: true);
         });
     }
 

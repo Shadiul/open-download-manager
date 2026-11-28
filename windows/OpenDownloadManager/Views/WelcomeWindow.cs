@@ -152,6 +152,9 @@ public sealed class WelcomeWindow : ToolWindow
         FitHeight();
     }
 
+    /// <summary>Straight to the browsers, for the installer's "Set up the browser extension".</summary>
+    public void ShowBrowsers() => Show(2);
+
     private void ShowFolder()
     {
         var reply = _core.Call(new { type = "getSettings" });
