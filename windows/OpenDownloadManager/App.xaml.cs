@@ -218,13 +218,15 @@ public partial class App : Application
         _tray = new TaskbarIcon
         {
             ToolTipText = AppPaths.AppName,
-            IconSource = new BitmapImage(new Uri(AppPaths.IconPath)),
+            IconSource = TrayIcon(),
             ContextMenuMode = ContextMenuMode.SecondWindow,
             ContextFlyout = menu,
             NoLeftClickDelay = true,
             LeftClickCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(ShowWindow),
         };
         _tray.ForceCreate();
+        // The glyph is one colour, so it follows the taskbar when Windows switches between light and dark.
+        ThemeColors.SystemColorsChanged += () => { if (_tray is not null) _tray.IconSource = TrayIcon(); };
 
         static MenuFlyoutItem Item(string text, Action action)
         {
@@ -233,6 +235,8 @@ public partial class App : Application
             return item;
         }
     }
+
+    private static BitmapImage TrayIcon() => new(new Uri(AppPaths.TrayIconPath(ThemeColors.TaskbarIsLight)));
 
     public void UpdateTrayTooltip(string text)
     {

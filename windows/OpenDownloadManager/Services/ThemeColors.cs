@@ -32,6 +32,26 @@ public static class ThemeColors
     /// </summary>
     private static bool SystemIsDark => Ui.GetColorValue(UIColorType.Foreground).R > 128;
 
+    /// <summary>
+    /// Whether the taskbar and tray are light. That is Windows' own mode, which can differ from the
+    /// apps' mode (Settings, Personalization, Colors, Custom). A dark taskbar when the setting is missing.
+    /// </summary>
+    public static bool TaskbarIsLight
+    {
+        get
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+                return key?.GetValue("SystemUsesLightTheme") is int v && v != 0;
+            }
+            catch { return false; }
+        }
+    }
+
+    /// <summary>Raised on the UI thread when Windows' colours change, the taskbar's mode included.</summary>
+    public static event Action? SystemColorsChanged;
+
     private static Microsoft.UI.Dispatching.DispatcherQueue? _ui;
 
     /// <summary>Call once on the UI thread: Windows switching light/dark (or its accent) repaints the colours.</summary>
@@ -42,6 +62,7 @@ public static class ThemeColors
         {
             if (Appearance.CustomAccent is null) Appearance.ApplyAccent();
             else RaiseChanged();
+            SystemColorsChanged?.Invoke();
         });
     }
 
