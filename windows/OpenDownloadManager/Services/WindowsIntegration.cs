@@ -74,6 +74,8 @@ public static class StartupRegistration
 
     public static void Apply(bool enabled)
     {
+        // A test copy (ODM_PROFILE) shares the value name with the installed app: leave it alone.
+        if (AppPaths.Profile is not null) return;
         using var k = Registry.CurrentUser.CreateSubKey(RunKey);
         if (enabled) k.SetValue(ValueName, $"\"{AppPaths.AppExe}\" --background");
         else k.DeleteValue(ValueName, throwOnMissingValue: false);
