@@ -156,7 +156,6 @@ public sealed class NewDownloadWindow : Window
         var done = _item.State == "completed";
         if (_start is not null)
         {
-            _start.Content = done ? "Done" : "Download";
             _later.Visibility = done ? Visibility.Collapsed : Visibility.Visible;
         }
         // The server's name, once known, replaces the guess, unless the user has typed their own.
@@ -209,6 +208,8 @@ public sealed class NewDownloadWindow : Window
     {
         var name = _name.Text.Trim();
         var folder = _folder.Text.Trim();
+        if (name.Length == 0) { ShowError("Enter a file name."); return; }
+        if (!Path.IsPathFullyQualified(folder)) { ShowError("Choose a full folder path, like C:\\Users\\you\\Downloads."); return; }
         var nameChanged = name.Length > 0 && name != _originalNameShown;
         // Only a folder the user changed is fixed; otherwise the category follows the server's file name.
         var folderChanged = folder.Length > 0 && folder != _defaultFolderFor(name);
@@ -226,13 +227,18 @@ public sealed class NewDownloadWindow : Window
         if (!Ok(await _core.CallAsync(new { type = "confirm", id = _item.Id, start = startNow }))) return;
         if (_dontAsk.IsChecked == true) await TurnOffAsking();
         Finish();
-        if (startNow && App.Current?.Settings.ShowProgressWindow == true && _item.State != "completed")
-            App.Current.ShowProgressWindow(_item);
+        // Finished while the question was open: show it as done. Otherwise its progress, if wanted.
+        if (_item.State == "completed") App.Current?.ShowProgressWindow(_item);
+        else if (startNow && App.Current?.Settings.ShowProgressWindow == true) App.Current.ShowProgressWindow(_item);
     }
 
+    /// <summary>
+    /// Cancel means the download is not wanted: it leaves the list, with whatever it fetched, even if it
+    /// finished while the question was open.
+    /// </summary>
     private async Task CancelDownload()
     {
-        await _core.CallAsync(new { type = "remove", id = _item.Id, deleteFile = false });
+        await _core.CallAsync(new { type = "remove", id = _item.Id, deleteFile = _item.State == "completed" });
         Finish();
     }
 
@@ -249,10 +255,18 @@ public sealed class NewDownloadWindow : Window
     private bool Ok(JsonObject reply)
     {
         if (reply["ok"]?.GetValue<bool>() == true) return true;
-        _error.Text = reply["error"]?.GetValue<string>() ?? "Something went wrong.";
+        var error = reply["error"]?.GetValue<string>() ?? "Something went wrong.";
+        // Removed from the list meanwhile: there is nothing left to answer.
+        if (error == "No such download") { Finish(); return false; }
+        ShowError(error);
+        return false;
+    }
+
+    private void ShowError(string message)
+    {
+        _error.Text = message;
         _error.Visibility = Visibility.Visible;
         FitHeight();
-        return false;
     }
 
     private void Finish()

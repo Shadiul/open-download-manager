@@ -27,6 +27,7 @@ public sealed partial class DownloadItem : ObservableObject
     [ObservableProperty] public partial int Connections { get; set; }
     [ObservableProperty] public partial long Position { get; set; }
     [ObservableProperty] public partial long CreatedAt { get; set; }
+    [ObservableProperty] public partial long FinishedAt { get; set; }
     /// <summary>This download's own speed limit in bytes per second; 0 for none.</summary>
     [ObservableProperty] public partial long SpeedLimit { get; set; }
     [ObservableProperty] public partial bool AwaitingConfirmation { get; set; }
@@ -77,6 +78,7 @@ public sealed partial class DownloadItem : ObservableObject
         Connections = (int)(Long(j, "connections") ?? 0);
         Position = Long(j, "position") ?? 0;
         CreatedAt = Long(j, "createdAt") ?? 0;
+        FinishedAt = Long(j, "finishedAt") ?? 0;
         SpeedLimit = Long(j, "speedLimit") ?? 0;
         AwaitingConfirmation = j["awaitingConfirmation"]?.GetValue<bool>() ?? false;
 
@@ -99,6 +101,7 @@ public sealed partial class DownloadItem : ObservableObject
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(AddedText));
         OnPropertyChanged(nameof(CanPause));
+        OnPropertyChanged(nameof(CanRedownload));
         OnPropertyChanged(nameof(CanResume));
         OnPropertyChanged(nameof(IsPaused));
         OnPropertyChanged(nameof(ProgressPercent));
@@ -119,19 +122,21 @@ public sealed partial class DownloadItem : ObservableObject
     // ----- the one progress-and-status column -----
 
     /// <summary>A bar while the download runs or is paused partway; a word otherwise.</summary>
-    public bool BarVisible => State is "connecting" or "downloading" or "waitingToRetry"
+    public bool BarVisible => State is "connecting" or "downloading" or "waitingToRetry" or "finishing"
         || (State == "paused" && !AwaitingConfirmation && Downloaded > 0);
 
     public bool StateVisible => !BarVisible;
 
     /// <summary>The progress column's text: "36%", "Paused 36%", "Done" and so on.</summary>
-    public string ProgressText => BarVisible ? (State == "connecting" ? "Connecting" : BarText) : StateText;
+    public string ProgressText => BarVisible
+        ? State switch { "connecting" => "Connecting", "finishing" => "Finishing…", _ => BarText }
+        : StateText;
 
     // ----- the row as a progress bar -----
 
     /// <summary>How far across the row the fill reaches (only X is used).</summary>
     public System.Numerics.Vector3 FillScale => new(
-        (float)(IsCompleted ? 1 : BarVisible ? (TotalSize is > 0 ? Math.Max(0.004, Progress / 100) : 1) : IsFailed && Downloaded > 0 && TotalSize is > 0 ? Progress / 100 : 0), 1, 1);
+        (float)(IsCompleted || State == "finishing" ? 1 : BarVisible ? (TotalSize is > 0 ? Math.Max(0.004, Progress / 100) : 1) : IsFailed && Downloaded > 0 && TotalSize is > 0 ? Progress / 100 : 0), 1, 1);
 
     /// <summary>Faint without a known size; fades out once done.</summary>
     public double FillOpacity => IsCompleted ? 0 : BarVisible ? (TotalSize is > 0 ? 1 : 0.55) : IsFailed ? 1 : 0;
@@ -190,7 +195,7 @@ public sealed partial class DownloadItem : ObservableObject
     {
         "failed" => ThemeColors.Brush(() => ThemeColors.Critical, "critical"),
         "completed" => ThemeColors.Brush(() => ThemeColors.Success, "success"),
-        "downloading" or "connecting" => ThemeColors.Brush(() => ThemeColors.AccentText, "accentText"),
+        "downloading" or "connecting" or "finishing" => ThemeColors.Brush(() => ThemeColors.AccentText, "accentText"),
         _ => ThemeColors.Brush(() => ThemeColors.SecondaryText, "secondary"),
     };
 
@@ -212,6 +217,7 @@ public sealed partial class DownloadItem : ObservableObject
         "connecting" => "Connecting",
         "downloading" => Connections > 1 ? $"{Connections} connections" : "Downloading",
         "waitingToRetry" => "Retrying",
+        "finishing" => "Finishing",
         "paused" when AwaitingConfirmation => "Waiting for you",
         "paused" => "Paused",
         "completed" => "Done",
@@ -233,15 +239,22 @@ public sealed partial class DownloadItem : ObservableObject
 
     private static long? Long(JsonObject j, string key) => j[key] is JsonValue v && v.TryGetValue<long>(out var n) ? n : null;
 
-    public bool IsActive => State is "connecting" or "downloading" or "waitingToRetry";
+    public bool IsActive => State is "connecting" or "downloading" or "waitingToRetry" or "finishing";
+
+    /// <summary>Every byte is in; the file is being put together.</summary>
+    public bool IsFinishing => State == "finishing";
     public bool IsCompleted => State == "completed";
     public bool IsFailed => State == "failed";
-    public bool CanPause => IsActive || State == "queued";
+    // Nothing to pause once every byte is in.
+    public bool CanPause => (IsActive && !IsFinishing) || State == "queued";
 
     /// <summary>One Pause/Resume action: Pause while it runs or waits its turn, Resume otherwise.</summary>
     public string PauseResumeText => CanPause ? "Pause" : "Resume";
     public string PauseResumeGlyph => CanPause ? "\uE769" : "\uE768";
     public bool CanResume => State is "paused" or "failed";
+
+    /// <summary>Finished or failed: it can be fetched again from the start.</summary>
+    public bool CanRedownload => State is "completed" or "failed";
 
     /// <summary>A video shows its title until the file name is known.</summary>
     public string DisplayName =>
@@ -272,6 +285,7 @@ public sealed partial class DownloadItem : ObservableObject
                     ? $"{Format.Speed(Speed)}{Eta()}{(Connections > 1 ? $" · {Connections} connections" : "")}"
                     : "Downloading",
                 "waitingToRetry" => "Connection lost, retrying…",
+                "finishing" => Kind == "video" ? "Putting the video together…" : "Saving the file…",
                 "paused" when AwaitingConfirmation => "Waiting for you to confirm",
                 "paused" => Resumable || Downloaded == 0 ? "Paused" : "Paused (will restart: server cannot resume)",
                 "completed" => "Done",

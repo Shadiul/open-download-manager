@@ -107,6 +107,11 @@ pub enum Command {
         id: u64,
     },
     ClearCompleted,
+    /// Fetches a finished or failed download again from the start; a finished file is replaced
+    /// only once the new copy is complete.
+    Redownload {
+        id: u64,
+    },
     SetJobSpeedLimit {
         id: u64,
         limit: u64,
@@ -283,7 +288,8 @@ struct Entry {
     last_at: Instant,
     /// Removed while running: delete once it has stopped (`true` also deletes the file).
     removing: Option<bool>,
-    /// A new name or folder chosen while running: applied once the run has stopped, then it resumes.
+    /// A new name or folder chosen while running. The download carries on undisturbed; the choice is
+    /// applied when the run ends (the finished file, or the partial one, moves).
     pending_edit: Option<(Option<String>, Option<String>)>,
 }
 
@@ -512,6 +518,7 @@ impl Actor {
                 self.awaiting_refresh = Some((id, Instant::now()));
                 json!({ "ok": true })
             }
+            Command::Redownload { id } => self.redownload(id),
             Command::ClearCompleted => {
                 let done: Vec<u64> = self
                     .jobs
@@ -554,7 +561,8 @@ impl Actor {
                 if !start {
                     return self.pause(id);
                 }
-                if e.rec.job.state == JobState::Paused && e.run.is_none() {
+                // Paused, or failed before the answer came: go (again).
+                if matches!(e.rec.job.state, JobState::Paused | JobState::Failed) && e.run.is_none() {
                     return self.resume(id);
                 }
                 self.save(id);
@@ -710,13 +718,18 @@ impl Actor {
                 Err(error) => json!({ "ok": false, "error": error }),
             };
         }
-        if let Some(run) = &mut e.run {
-            // Stop it, move what it has so far, and go on from there (see `finished`).
-            e.pending_edit = Some((file_name, save_dir));
-            if !run.cancel.is_cancelled() {
-                run.requeue = true;
-                run.cancel.cancel();
+        if e.run.is_some() {
+            // No stop and restart: the choice waits for the end of the run (see `finished`), and
+            // the list shows the new name right away. A later choice adds to an earlier one.
+            let clean = |v: Option<String>| v.map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+            let (file_name, save_dir) = (clean(file_name), clean(save_dir));
+            let (old_name, old_dir) = e.pending_edit.take().unwrap_or_default();
+            if let Some(name) = &file_name {
+                e.rec.job.file_name = naming::sanitize(name);
             }
+            e.pending_edit = Some((file_name.or(old_name), save_dir.or(old_dir)));
+            self.save(id);
+            self.emit_job(id);
             return json!({ "ok": true });
         }
         let result = apply_edit(&mut e.rec, file_name, save_dir);
@@ -726,6 +739,43 @@ impl Actor {
             Ok(()) => json!({ "ok": true }),
             Err(error) => json!({ "ok": false, "error": error }),
         }
+    }
+
+    fn redownload(&mut self, id: u64) -> Value {
+        let Some(e) = self.jobs.get_mut(&id) else {
+            return json!({ "ok": false, "error": "No such download" });
+        };
+        if e.run.is_some() {
+            return json!({ "ok": false, "error": "The download is still running" });
+        }
+        // A partial file from a failed attempt is of no use to a fresh start.
+        if e.rec.job.state != JobState::Completed {
+            delete_files(&e.rec, false);
+        }
+        let job = &mut e.rec.job;
+        if job.state == JobState::Completed {
+            job.replaces = job.file_path.clone();
+            // The earlier copy sits at the name; the new one fetches beside it, in the same folder.
+            if let Some(dir) = job.file_path.as_deref().and_then(|p| std::path::Path::new(p).parent()) {
+                job.save_dir = dir.to_string_lossy().into_owned();
+                job.custom_dir = true;
+            }
+            job.custom_name = true;
+        }
+        job.file_path = None;
+        job.finished_at = None;
+        job.downloaded = 0;
+        job.error = None;
+        job.link_expired = false;
+        job.state = JobState::Queued;
+        e.rec.request.name_decided = false;
+        e.rec.request.etag = None;
+        e.rec.request.last_modified = None;
+        let _ = self.store.save_segments(id, &[]);
+        self.save(id);
+        self.emit_job(id);
+        self.schedule();
+        json!({ "ok": true })
     }
 
     fn pause(&mut self, id: u64) -> Value {
@@ -922,8 +972,11 @@ impl Actor {
             let t = &run.transfer;
             let job = &mut e.rec.job;
             if let Some(s) = t.settled() {
-                job.file_name = s.file_name;
-                job.save_dir = s.save_dir.to_string_lossy().into_owned();
+                // A name chosen while running stays on show until it is applied.
+                if e.pending_edit.is_none() {
+                    job.file_name = s.file_name;
+                    job.save_dir = s.save_dir.to_string_lossy().into_owned();
+                }
                 job.total_size = s.total;
                 job.resumable = s.resumable;
                 e.rec.request = s.request;
@@ -950,7 +1003,9 @@ impl Actor {
             job.downloaded = downloaded;
             job.connections = t.active.load(Ordering::Relaxed);
             if !run.cancel.is_cancelled() {
-                if job.connections > 0 {
+                if t.finishing.load(Ordering::Relaxed) {
+                    job.state = JobState::Finishing;
+                } else if job.connections > 0 {
                     job.state = JobState::Downloading;
                 } else if job.state == JobState::Downloading {
                     job.state = JobState::WaitingToRetry;
@@ -1009,11 +1064,30 @@ impl Actor {
                 }
                 job.file_path = Some(path.to_string_lossy().into_owned());
                 job.finished_at = Some(now_ms());
+                if let Some(old) = job.replaces.take().map(PathBuf::from)
+                    && old != path
+                {
+                    // Replace the earlier copy, keeping its name; if that fails, both stay.
+                    if (std::fs::remove_file(&old).is_ok() || !old.exists())
+                        && std::fs::rename(&path, &old).is_ok()
+                    {
+                        job.file_path = Some(old.to_string_lossy().into_owned());
+                        if let Some(name) = old.file_name() {
+                            job.file_name = name.to_string_lossy().into_owned();
+                        }
+                    }
+                }
                 if let Some(size) = size {
                     job.downloaded = size;
                     job.total_size = Some(size);
                 }
                 let _ = self.store.save_segments(id, &[]);
+                if let Some((file_name, save_dir)) = e.pending_edit.take()
+                    && let Err(error) = move_finished(&mut e.rec, file_name, save_dir)
+                {
+                    // The file is complete where it is; say why it did not move.
+                    e.rec.job.error = Some(error);
+                }
             }
             Outcome::Cancelled => {
                 e.rec.job.state = if run.requeue { JobState::Queued } else { JobState::Paused };
@@ -1028,6 +1102,9 @@ impl Actor {
                 }
             }
             Outcome::Failed { error, link_expired } => {
+                if let Some((file_name, save_dir)) = e.pending_edit.take() {
+                    let _ = apply_edit(&mut e.rec, file_name, save_dir);
+                }
                 e.rec.job.state = JobState::Failed;
                 e.rec.job.error = Some(error);
                 e.rec.job.link_expired = link_expired;

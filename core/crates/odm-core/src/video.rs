@@ -443,6 +443,9 @@ pub fn download_args(job: &VideoJob, identity: Identity) -> Vec<String> {
         "4",
         "--progress-template",
         "download:ODMP %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s",
+        // Post-processing (merging video and audio, making an MP3) shows as finishing.
+        "--progress-template",
+        "postprocess:ODMS %(progress.postprocessor)s %(progress.status)s",
         "--print",
         "after_move:ODMF %(filepath)s",
         "--no-simulate",
@@ -590,6 +593,8 @@ async fn run_as(
                     if let Some(t) = total {
                         transfer.external_total.store(base + t, Ordering::Relaxed);
                     }
+                } else if line.starts_with("ODMS ") {
+                    transfer.finishing.store(true, Ordering::Relaxed);
                 } else if let Some(path) = line.strip_prefix("ODMF ") {
                     final_path = Some(PathBuf::from(path.trim()));
                 }

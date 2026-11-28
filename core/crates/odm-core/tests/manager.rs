@@ -287,3 +287,23 @@ fn download_later_pauses_a_started_download() {
     assert_eq!(paused["awaitingConfirmation"], false);
     h.stop();
 }
+
+#[test]
+fn redownload_replaces_the_finished_file_once_the_new_copy_is_in() {
+    let content = data(300 * KB, 6);
+    let (_rt, server) = server(content.clone());
+    let mut h = Harness::start(tempfile::tempdir().unwrap(), false);
+    let id =
+        h.call(json!({ "type": "add", "url": server.url, "fileName": "again.bin" }))["id"].as_u64().unwrap();
+    let first = h.wait_for(id, "completion", |j| j["state"] == "completed");
+    let path = std::path::PathBuf::from(first["filePath"].as_str().unwrap());
+    std::fs::write(&path, b"stale copy").unwrap();
+
+    assert_eq!(h.call(json!({ "type": "redownload", "id": id }))["ok"], true);
+    let again = h.wait_for(id, "second completion", |j| j["state"] == "completed" && j["replaces"].is_null());
+    assert_eq!(std::path::PathBuf::from(again["filePath"].as_str().unwrap()), path, "same name and folder");
+    assert_eq!(std::fs::read(&path).unwrap(), content, "the fresh copy replaced the old one");
+    let siblings = std::fs::read_dir(path.parent().unwrap()).unwrap().count();
+    assert_eq!(siblings, 1, "no second copy left beside it");
+    h.stop();
+}
