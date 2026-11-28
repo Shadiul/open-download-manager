@@ -21,6 +21,9 @@ public sealed partial class MainWindow : Window
         ViewModel = viewModel;
         InitializeComponent();
         ShowDensity();
+        ShowQueueAction(AfterDownload.QueueAction(ViewModel.Core));
+        AfterDownload.QueueActionChanged += value => DispatcherQueue.TryEnqueue(() => ShowQueueAction(value));
+        ThemeColors.Changed += () => ShowQueueAction(AfterDownload.QueueAction(ViewModel.Core));
         var find = new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = Windows.System.VirtualKey.F, Modifiers = Windows.System.VirtualKeyModifiers.Control };
         find.Invoked += (_, a) => { Search.Focus(FocusState.Keyboard); a.Handled = true; };
         if (Content is UIElement root) root.KeyboardAccelerators.Add(find);
@@ -53,6 +56,7 @@ public sealed partial class MainWindow : Window
             if (e.PropertyName == nameof(MainViewModel.CheckedCount)) ShowChecked();
         };
         ViewSettings.Current.Track(this);
+        Appearance.Track(this);
         ShowSortArrows();
     }
 
@@ -294,7 +298,25 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>Counts down before sleep or shutdown; returns false if the user cancels.</summary>
-    public async Task<bool> ConfirmCountdown(string action, int seconds)
+    // ----- when all downloads finish -----
+
+    private void ShowQueueAction(string value)
+    {
+        var action = AfterDownload.QueueActions.FirstOrDefault(a => a.Value == value);
+        WhenDoneText.Text = $"When done: {action.Short ?? "nothing"}";
+        WhenDoneIcon.Glyph = action.Glyph ?? "";
+        // Armed: in the accent colour, so a pending shutdown is hard to miss.
+        if (value == "nothing") WhenDoneText.ClearValue(TextBlock.ForegroundProperty);
+        else WhenDoneText.Foreground = ThemeColors.Brush(() => ThemeColors.AccentText, "accentText");
+        if (value == "nothing") WhenDoneIcon.ClearValue(FontIcon.ForegroundProperty);
+        else WhenDoneIcon.Foreground = ThemeColors.Brush(() => ThemeColors.AccentText, "accentText");
+    }
+
+    private void OnWhenDoneMenuOpening(object? sender, object e) =>
+        AfterDownload.FillMenu(WhenDoneMenu.Items, ViewModel.Core, AfterDownload.QueueAction(ViewModel.Core));
+
+    /// <summary>A dialog counting down; true when it ran out or "Now" was pressed. {0} is the seconds left.</summary>
+    public async Task<bool> ConfirmCountdown(string message, int seconds)
     {
         var text = new TextBlock { TextWrapping = TextWrapping.Wrap };
         var dialog = new ContentDialog
@@ -313,7 +335,7 @@ public sealed partial class MainWindow : Window
         timer.Tick += (_, _) =>
         {
             left--;
-            text.Text = $"The computer will {action} in {left} seconds.";
+            text.Text = string.Format(message, left);
             if (left <= 0)
             {
                 timedOut = true;
@@ -321,7 +343,7 @@ public sealed partial class MainWindow : Window
                 dialog.Hide();
             }
         };
-        text.Text = $"The computer will {action} in {left} seconds.";
+        text.Text = string.Format(message, left);
         timer.Start();
         var result = await dialog.ShowAsync();
         timer.Stop();

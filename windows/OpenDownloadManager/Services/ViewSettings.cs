@@ -23,6 +23,12 @@ public sealed partial class ViewSettings : ObservableObject
     [ObservableProperty] public partial bool ShowSpeed { get; set; } = true;
     [ObservableProperty] public partial bool ShowTimeLeft { get; set; } = true;
     [ObservableProperty] public partial bool ShowAdded { get; set; } = true;
+    [ObservableProperty] public partial string Accent { get; set; } = "system";
+    [ObservableProperty] public partial string Backdrop { get; set; } = "mica";
+    [ObservableProperty] public partial string ProgressStyle { get; set; } = "dots";
+    [ObservableProperty] public partial string Animation { get; set; } = "calm";
+    [ObservableProperty] public partial string FillStrength { get; set; } = "normal";
+    [ObservableProperty] public partial string ColorBy { get; set; } = "status";
 
     public void Load(AppSettings store)
     {
@@ -34,7 +40,20 @@ public sealed partial class ViewSettings : ObservableObject
         ShowSpeed = store.ShowSpeed;
         ShowTimeLeft = store.ShowTimeLeft;
         ShowAdded = store.ShowAdded;
+        Accent = store.Accent;
+        Backdrop = store.Backdrop;
+        ProgressStyle = store.ProgressStyle;
+        Animation = store.Animation;
+        FillStrength = store.FillStrength;
+        ColorBy = store.ColorBy;
     }
+
+    partial void OnAccentChanged(string value) { Save(s => s.Accent = value); Appearance.ApplyAccent(); }
+    partial void OnBackdropChanged(string value) { Save(s => s.Backdrop = value); Appearance.ApplyBackdrops(); }
+    partial void OnProgressStyleChanged(string value) { Save(s => s.ProgressStyle = value); Appearance.RaiseRowsChanged(); }
+    partial void OnAnimationChanged(string value) { Save(s => s.Animation = value); Appearance.RaiseRowsChanged(); }
+    partial void OnFillStrengthChanged(string value) { Save(s => s.FillStrength = value); Appearance.RaiseRowsChanged(); }
+    partial void OnColorByChanged(string value) { Save(s => s.ColorBy = value); Appearance.RaiseRowsChanged(); }
 
     partial void OnThemeChanged(string value)
     {

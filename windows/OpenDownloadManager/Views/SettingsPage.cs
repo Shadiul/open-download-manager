@@ -1,17 +1,21 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using OpenDownloadManager.Core;
+using OpenDownloadManager.Models;
 using OpenDownloadManager.Services;
 using Windows.Storage.Pickers;
 
 namespace OpenDownloadManager.Views;
 
 /// <summary>
-/// The settings, as a full page of Fluent settings cards. Every change is saved as it is made:
-/// engine settings go to the core, app settings to app-settings.json.
+/// The settings, as a page of Fluent settings cards in sections, with a bar at the top that jumps
+/// between them. Every change is saved as it is made: engine settings go to the core, app
+/// settings to app-settings.json. Appearance changes show at once in the preview at the top of
+/// that section and in the list behind.
 /// </summary>
 public sealed partial class SettingsPage : UserControl
 {
@@ -22,6 +26,7 @@ public sealed partial class SettingsPage : UserControl
     private bool _loading = true;
     private readonly DispatcherTimerLike _saveSoon;
 
+    // Downloads
     private readonly TextBox _folder = new() { MinWidth = 260 };
     private readonly ToggleSwitch _categories = Switch();
     private readonly NumberBox _connections = Number(1, 32);
@@ -31,19 +36,54 @@ public sealed partial class SettingsPage : UserControl
     private readonly ToggleSwitch _schedule = Switch();
     private readonly TimePicker _start = new() { ClockIdentifier = "24HourClock", MinWidth = 0 };
     private readonly TimePicker _stop = new() { ClockIdentifier = "24HourClock", MinWidth = 0 };
-    private readonly ComboBox _whenDone = new() { Items = { "Do nothing", "Sleep", "Shut down" }, MinWidth = 160 };
+
+    // After download
+    private readonly ToggleSwitch _notifications = Switch();
+    private readonly ToggleSwitch _afterOpen = Switch();
+    private readonly ToggleSwitch _afterShow = Switch();
+    private readonly ToggleSwitch _afterExtract = Switch();
+    private readonly CheckBox _afterExtractDelete = new() { Content = "Then move the archive to the Recycle Bin" };
+    private readonly ComboBox _whenDone = new() { MinWidth = 220 };
+    private readonly ComboBox _countdown = new() { Items = { "10 seconds", "30 seconds", "1 minute", "2 minutes" }, MinWidth = 160 };
+    private readonly ToggleSwitch _once = Switch();
+
+    // Browsers and video
     private readonly ToggleSwitch _confirm = Switch();
     private readonly ToggleSwitch _progressWindows = Switch();
     private readonly ToggleSwitch _updateTools = Switch();
+    private readonly TextBlock _hostStatus = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _toolsStatus = new() { TextWrapping = TextWrapping.Wrap };
+
+    // Appearance
     private readonly ComboBox _theme = new() { Items = { "Use system setting", "Light", "Dark" }, MinWidth = 180 };
+    private readonly ComboBox _backdrop = new() { Items = { "Mica", "Mica Alt", "Acrylic", "Solid" }, MinWidth = 180 };
+    private readonly ComboBox _animation = new() { Items = { "Off", "Calm", "Lively" }, MinWidth = 180 };
+    private readonly ComboBox _strength = new() { Items = { "Subtle", "Normal", "Vivid" }, MinWidth = 180 };
+    private readonly ComboBox _colorBy = new() { Items = { "Download status", "File type" }, MinWidth = 180 };
     private readonly ComboBox _density = new() { Items = { "Compact", "Standard", "Comfortable" }, MinWidth = 180 };
+    private readonly StackPanel _swatches = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
+    private readonly Grid _styleTiles = new() { ColumnSpacing = 8, RowSpacing = 8 };
+
+    // System
     private readonly ToggleSwitch _startWithWindows = Switch();
     private readonly ToggleSwitch _closeToTray = Switch();
     private readonly ToggleSwitch _clipboard = Switch();
-    private readonly ToggleSwitch _notifications = Switch();
-    private readonly TextBlock _hostStatus = new() { TextWrapping = TextWrapping.Wrap };
-    private readonly TextBlock _toolsStatus = new() { TextWrapping = TextWrapping.Wrap };
+
     private readonly InfoBar _error = new() { Severity = InfoBarSeverity.Error, IsClosable = true };
+    private readonly ScrollViewer _scroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly SelectorBar _sections = new();
+    private readonly List<(SelectorBarItem Item, FrameworkElement Anchor)> _anchors = [];
+    private bool _jumping;
+
+    private static readonly (string Value, string Label)[] RowStyles =
+    [
+        ("dots", "Dot matrix"),
+        ("solid", "Solid"),
+        ("glass", "Glass"),
+        ("stripes", "Stripes"),
+        ("underline", "Underline"),
+        ("none", "Text only"),
+    ];
 
     public SettingsPage(CoreClient core, AppSettings app, IntPtr hwnd)
     {
@@ -51,71 +91,126 @@ public sealed partial class SettingsPage : UserControl
         _app = app;
         _hwnd = hwnd;
         _saveSoon = new DispatcherTimerLike(DispatcherQueue, TimeSpan.FromMilliseconds(500), SaveEngine);
+        foreach (var a in AfterDownload.QueueActions) _whenDone.Items.Add(a.Label);
 
+        var page = new StackPanel { Spacing = 4, MaxWidth = 1000, HorizontalAlignment = HorizontalAlignment.Stretch };
+        page.Children.Add(_error);
+
+        // ----- Downloads -----
         var browse = new Button { Content = "Browse…" };
         browse.Click += async (_, _) => await PickFolder();
-        var folderRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _folder, browse } };
-
         var times = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _start, new TextBlock { Text = "to", VerticalAlignment = VerticalAlignment.Center }, _stop } };
+        Section(page, "Downloads", "\uE896");
+        page.Children.Add(Card("\uE8B7", "Download folder", "Where finished files go.", new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _folder, browse } }));
+        page.Children.Add(Card("\uE8F1", "Sort into category folders", "Video, Music, Documents, Programs, Archives and Other, inside the download folder.", _categories));
+        page.Children.Add(Card("\uE968", "Connections per download", "More connections are faster on most servers. 1 to 32.", _connections));
+        page.Children.Add(Card("\uE8CB", "Downloads at the same time", "The rest wait in the queue.", _parallel));
+        page.Children.Add(Card("\uEC4A", "Speed limit", "For all downloads together. 0 means no limit.",
+            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _speed, _speedUnit } }));
+        page.Children.Add(Card("\uE787", "Only download between set times", "Downloads outside the window wait in the queue.", _schedule));
+        page.Children.Add(Card("\uE823", "Download window", "Can run past midnight, such as 23:00 to 07:00.", times));
 
-        var reRegister = new Button { Content = "Register again" };
+        // ----- After download -----
+        Section(page, "After download", "\uE73E");
+        page.Children.Add(Card("\uEA8F", "Notify me", "When a download finishes or fails.", _notifications));
+        page.Children.Add(Card("\uE8E5", "Open the file", "Programs and scripts are never started by themselves.", _afterOpen));
+        page.Children.Add(Card("\uE838", "Show it in its folder", "File Explorer opens with the file selected.", _afterShow));
+        page.Children.Add(Card("\uF012", "Extract archives", "ZIP, 7z, RAR and TAR files unpack into a folder next to them.", _afterExtract,
+            extra: _afterExtractDelete));
+        Subhead(page, "When all downloads finish");
+        page.Children.Add(Card("\uE7E8", "Then", "Also in the status bar and the tray menu, for just this time.", _whenDone));
+        page.Children.Add(Card("\uE916", "Time to cancel", "A countdown shows first, with Cancel and Now.", _countdown));
+        page.Children.Add(Card("\uE8ED", "Only once", "Go back to Do nothing afterwards, so a shutdown is never left set by mistake.", _once));
+
+        // ----- Browsers -----
+        var reRegister = new Button { Content = "Connect again" };
         reRegister.Click += (_, _) =>
         {
             try { NativeHostRegistration.Register(); } catch (Exception e) { ShowError(e.Message); }
             ShowHostStatus();
         };
+        var openExtension = new Button { Content = "Open the extension's folder" };
+        openExtension.Click += (_, _) =>
+        {
+            BundledExtension.Sync();
+            OpenFolder(Path.Combine(AppPaths.DataDir, "extension"));
+        };
+        Section(page, "Browsers", "\uE774");
+        page.Children.Add(Card("\uE774", "Browser extension", "Sends your browser's downloads and videos here. It comes with the app; add it to each browser you use.",
+            new BrowserList(), wide: true));
+        page.Children.Add(Card("\uE71B", "Connection", null, new StackPanel
+        {
+            Spacing = 8,
+            Children = { _hostStatus, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { reRegister, openExtension } } },
+        }, wide: true));
+        page.Children.Add(Card("\uE8A7", "Ask before each browser download", "Shows the file name, size and folder; the download starts meanwhile.", _confirm));
+        page.Children.Add(Card("\uE9D9", "Open a progress window for each download", "Like IDM. You can close it; the download carries on.", _progressWindows));
+
+        // ----- Appearance -----
+        Section(page, "Appearance", "\uE790");
+        page.Children.Add(Preview());
+        page.Children.Add(Card("\uE793", "Theme", null, _theme));
+        page.Children.Add(Card("\uE790", "Accent colour", "For buttons, switches, selection and the rows.", null, extra: _swatches));
+        page.Children.Add(Card("\uE7F4", "Window material", "Mica takes on the desktop's colours; Acrylic shows it through, blurred.", _backdrop));
+        page.Children.Add(Card("\uE9D9", "Row progress", "How each download shows its progress across its row.", null, extra: _styleTiles));
+        page.Children.Add(Card("\uE945", "Animation", "A band of light that moves along downloading rows.", _animation));
+        page.Children.Add(Card("\uE706", "Fill strength", "How strongly rows are tinted.", _strength));
+        page.Children.Add(Card("\uE8EC", "Colour rows by", "File type gives video, music, documents, programs and archives each a colour.", _colorBy));
+        page.Children.Add(Card("\uE8FD", "Density", "How much space each download takes in the list.", _density));
+
+        // ----- Video -----
         var openTools = new Button { Content = "Open folder" };
         openTools.Click += (_, _) => OpenFolder(AppPaths.ToolsDir);
+        Section(page, "Video", "\uE714");
+        page.Children.Add(Card("\uE895", "Update yt-dlp every day", "Video sites change often; a current yt-dlp keeps working.", _updateTools));
+        page.Children.Add(Card("\uE90F", "Video tools", null, new StackPanel { Spacing = 8, Children = { _toolsStatus, openTools } }, wide: true));
+
+        // ----- System -----
+        Section(page, "System", "\uE770");
+        page.Children.Add(Card("\uE768", "Start with Windows", "Starts in the notification area, ready for browser downloads.", _startWithWindows));
+        page.Children.Add(Card("\uE921", "Closing the window keeps downloads running", "The app stays in the notification area.", _closeToTray));
+        page.Children.Add(Card("\uE77F", "Offer to download links I copy", "For files, and for video pages such as YouTube in Chrome.", _clipboard));
+
+        // ----- About -----
         var openData = new Button { Content = "Open folder" };
         openData.Click += (_, _) => OpenFolder(AppPaths.DataDir);
+        var welcome = new Button { Content = "Show the welcome screen" };
+        welcome.Click += (_, _) => App.Current?.ShowWelcome();
+        Section(page, "About", "\uE946");
+        page.Children.Add(Card("\uE946", $"Open Download Manager {typeof(App).Assembly.GetName().Version?.ToString(3)}", "Free and open source under GPL-3.0.", welcome));
+        page.Children.Add(Card("\uE8B7", "Data folder", "Download history, settings and app.log.", openData));
 
-        var page = new StackPanel { Spacing = 4, MaxWidth = 1000, HorizontalAlignment = HorizontalAlignment.Stretch };
-        page.Children.Add(new TextBlock { Text = "Settings", Style = Res<Style>("TitleTextBlockStyle"), Margin = new Thickness(0, 4, 0, 12) });
-        page.Children.Add(_error);
+        _scroller.Content = new Grid { Padding = new Thickness(24, 0, 24, 32), Children = { page } };
+        _scroller.ViewChanged += (_, _) => FollowScroll();
+        _sections.SelectionChanged += (_, _) => JumpToSection();
 
-        Group(page, "Downloads");
-        page.Children.Add(Card("", "Download folder", "Where finished files go.", folderRow));
-        page.Children.Add(Card("", "Sort into category folders", "Video, Music, Documents, Programs, Archives and Other, inside the download folder.", _categories));
-        page.Children.Add(Card("", "Connections per download", "More connections are faster on most servers. 1 to 32.", _connections));
-        page.Children.Add(Card("", "Downloads at the same time", "The rest wait in the queue.", _parallel));
-        page.Children.Add(Card("", "Speed limit", "For all downloads together. 0 means no limit.",
-            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _speed, _speedUnit } }));
-
-        Group(page, "Schedule");
-        page.Children.Add(Card("", "Only download between set times", "Downloads outside the window wait in the queue.", _schedule));
-        page.Children.Add(Card("", "Download window", "Can run past midnight, such as 23:00 to 07:00.", times));
-        page.Children.Add(Card("", "When all downloads finish", "Sleep and shut down wait 30 seconds so you can cancel.", _whenDone));
-
-        Group(page, "Browser and video");
-        page.Children.Add(Card("", "Ask before each browser download", "Shows the file name, size and folder before it starts.", _confirm));
-        page.Children.Add(Card("", "Open a progress window for each download", "Like IDM. You can close it; the download carries on.", _progressWindows));
-        page.Children.Add(Card("", "Browser extension", null, new StackPanel { Spacing = 8, Children = { _hostStatus, reRegister } }, wideContent: true));
-        page.Children.Add(Card("", "Update yt-dlp every day", "Video sites change often; a current yt-dlp keeps working.", _updateTools));
-        page.Children.Add(Card("", "Video tools", null, new StackPanel { Spacing = 8, Children = { _toolsStatus, openTools } }, wideContent: true));
-
-        Group(page, "Appearance");
-        page.Children.Add(Card("", "Theme", null, _theme));
-        page.Children.Add(Card("", "Density", "How much space each download takes in the list.", _density));
-
-        Group(page, "System");
-        page.Children.Add(Card("", "Start with Windows", "Starts in the notification area, ready for browser downloads.", _startWithWindows));
-        page.Children.Add(Card("", "Closing the window keeps downloads running", "The app stays in the notification area.", _closeToTray));
-        page.Children.Add(Card("", "Offer to download links I copy", "For files, and for video pages such as YouTube in Chrome.", _clipboard));
-        page.Children.Add(Card("", "Notifications", "When a download finishes or fails.", _notifications));
-
-        Group(page, "About");
-        page.Children.Add(Card("", $"Open Download Manager {typeof(App).Assembly.GetName().Version?.ToString(3)}", "Free and open source under GPL-3.0.", null));
-        page.Children.Add(Card("", "Data folder", "Download history, settings and app.log.", openData));
-
-        Content = new ScrollViewer
+        var header = new StackPanel
         {
-            Content = new Grid { Padding = new Thickness(24, 8, 24, 32), Children = { page } },
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Padding = new Thickness(24, 4, 24, 4),
+            MaxWidth = 1048,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Children =
+            {
+                new TextBlock { Text = "Settings", Style = Res<Style>("TitleTextBlockStyle"), Margin = new Thickness(0, 4, 0, 4) },
+                _sections,
+            },
         };
+        var root = new Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        root.Children.Add(header);
+        Grid.SetRow(_scroller, 1);
+        root.Children.Add(_scroller);
+        Content = root;
 
         Load();
+        BuildSwatches();
+        BuildStyleTiles();
         Wire();
         _loading = false;
+
+        AfterDownload.QueueActionChanged += OnQueueActionChanged;
+        Unloaded += (_, _) => AfterDownload.QueueActionChanged -= OnQueueActionChanged;
     }
 
     private static T Res<T>(string key) where T : class => (T)Application.Current.Resources[key];
@@ -130,15 +225,35 @@ public sealed partial class SettingsPage : UserControl
         MinWidth = 140,
     };
 
-    private static void Group(Panel page, string title) => page.Children.Add(new TextBlock
+    // ----- layout -----
+
+    private void Section(Panel page, string title, string glyph)
+    {
+        var heading = new TextBlock
+        {
+            Text = title,
+            Style = Res<Style>("SubtitleTextBlockStyle"),
+            Margin = new Thickness(1, _anchors.Count == 0 ? 12 : 28, 0, 8),
+        };
+        page.Children.Add(heading);
+        var item = new SelectorBarItem { Text = title, Icon = new FontIcon { Glyph = glyph } };
+        _sections.Items.Add(item);
+        _anchors.Add((item, heading));
+    }
+
+    private static void Subhead(Panel page, string title) => page.Children.Add(new TextBlock
     {
         Text = title,
         Style = Res<Style>("BodyStrongTextBlockStyle"),
-        Margin = new Thickness(1, 20, 0, 6),
+        Margin = new Thickness(1, 14, 0, 6),
     });
 
-    /// <summary>A Fluent settings card: icon, title and description on the left, the control on the right.</summary>
-    private static Border Card(string glyph, string title, string? description, FrameworkElement? control, bool wideContent = false)
+    /// <summary>
+    /// A Fluent settings card: icon, title and description on the left, the control on the right.
+    /// <paramref name="wide"/> puts the control under the text instead; <paramref name="extra"/>
+    /// adds something below the whole card's first line (swatches, tiles, a dependent option).
+    /// </summary>
+    private static Border Card(string glyph, string title, string? description, FrameworkElement? control, bool wide = false, FrameworkElement? extra = null)
     {
         var grid = new Grid { ColumnSpacing = 16, MinHeight = 44 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -153,11 +268,10 @@ public sealed partial class SettingsPage : UserControl
         grid.Children.Add(text);
         if (control is not null)
         {
-            if (wideContent)
+            if (wide)
             {
-                // Status text and its button sit under the title.
                 text.Children.Add(control);
-                control.Margin = new Thickness(0, 6, 0, 0);
+                control.Margin = new Thickness(0, 10, 0, 0);
             }
             else
             {
@@ -165,6 +279,16 @@ public sealed partial class SettingsPage : UserControl
                 Grid.SetColumn(control, 2);
                 grid.Children.Add(control);
             }
+        }
+        if (extra is not null)
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            extra.Margin = new Thickness(0, 12, 0, 2);
+            Grid.SetRow(extra, 1);
+            Grid.SetColumn(extra, 1);
+            Grid.SetColumnSpan(extra, 2);
+            grid.Children.Add(extra);
         }
         return new Border
         {
@@ -175,6 +299,236 @@ public sealed partial class SettingsPage : UserControl
             Style = ThemedStyles.Card(),
         };
     }
+
+    // ----- section bar -----
+
+    private void JumpToSection()
+    {
+        if (_jumping) return;
+        var selected = _sections.SelectedItem;
+        var anchor = _anchors.FirstOrDefault(a => a.Item == selected).Anchor;
+        if (anchor is null || _scroller.Content is not UIElement content) return;
+        var y = anchor.TransformToVisual(content).TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
+        _jumping = true;
+        _scroller.ChangeView(null, Math.Max(0, y - 8), null);
+        _jumping = false;
+    }
+
+    /// <summary>The bar follows the scroll: the last section whose heading has passed the top.</summary>
+    private void FollowScroll()
+    {
+        if (_jumping || _scroller.Content is not UIElement content) return;
+        var top = _scroller.VerticalOffset + 40;
+        var current = _anchors[0].Item;
+        foreach (var (item, anchor) in _anchors)
+            if (anchor.TransformToVisual(content).TransformPoint(new Windows.Foundation.Point(0, 0)).Y <= top) current = item;
+        if (_scroller.VerticalOffset >= _scroller.ScrollableHeight - 1) current = _anchors[^1].Item;
+        if (_sections.SelectedItem == current) return;
+        _jumping = true;
+        _sections.SelectedItem = current;
+        _jumping = false;
+    }
+
+    // ----- appearance: preview, swatches, style tiles -----
+
+    private static DownloadItem Sample(ulong id, string name, string state, double progress, long size, long speed = 0) =>
+        DownloadItem.From(new JsonObject
+        {
+            ["id"] = (long)id,
+            ["kind"] = "http",
+            ["fileName"] = name,
+            ["saveDir"] = "",
+            ["state"] = state,
+            ["totalSize"] = size,
+            ["downloaded"] = (long)(size * progress),
+            ["speed"] = speed,
+        });
+
+    /// <summary>A few rows drawn the way the list draws them, so every change shows here at once.</summary>
+    private static Border Preview()
+    {
+        var rows = new StackPanel { Spacing = 4 };
+        rows.Children.Add(PreviewRow(Sample(900001, "ubuntu-24.04.3-desktop-amd64.iso", "downloading", 0.64, 6_250_000_000, 18_400_000)));
+        rows.Children.Add(PreviewRow(Sample(900002, "Big Buck Bunny 60fps 4K.mp4", "downloading", 0.37, 288_700_000, 9_200_000)));
+        rows.Children.Add(PreviewRow(Sample(900003, "holiday-photos.zip", "paused", 0.48, 912_000_000)));
+        rows.Children.Add(PreviewRow(Sample(900004, "quarterly-report.pdf", "finishing", 1, 4_200_000)));
+        return new Border
+        {
+            Child = new StackPanel
+            {
+                Spacing = 10,
+                Children =
+                {
+                    new TextBlock { Text = "Preview", Style = ThemedStyles.Text(caption: true, secondary: true) },
+                    rows,
+                },
+            },
+            Padding = new Thickness(16, 12, 16, 14),
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(1),
+            Style = ThemedStyles.Card(),
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+    }
+
+    /// <summary>The list's row fill (the same three layers the row template has), with text over it.</summary>
+    private static Grid FillGrid(DownloadItem item, string? style = null)
+    {
+        var fill = new Grid { CornerRadius = new CornerRadius(4), IsHitTestVisible = false, DataContext = item, Tag = style };
+        fill.Children.Add(new Border());
+        fill.Children.Add(new Grid { Children = { new Border { Visibility = Visibility.Collapsed }, new Border { Visibility = Visibility.Collapsed } } });
+        fill.Loaded += (_, _) => RowFill.Attach(fill);
+        return fill;
+    }
+
+    private static Grid PreviewRow(DownloadItem item)
+    {
+        var row = new Grid { Height = 40, ColumnSpacing = 12 };
+        row.Children.Add(FillGrid(item));
+        var line = new Grid { ColumnSpacing = 12, Padding = new Thickness(12, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
+        line.Children.Add(new FontIcon { Glyph = item.Glyph, FontSize = 16 });
+        var name = new TextBlock { Text = item.FileName, TextTrimming = TextTrimming.CharacterEllipsis };
+        Grid.SetColumn(name, 1);
+        line.Children.Add(name);
+        var size = new TextBlock { Text = item.SizeText, Style = ThemedStyles.Text(caption: false, secondary: true), TextTrimming = TextTrimming.CharacterEllipsis };
+        Grid.SetColumn(size, 2);
+        line.Children.Add(size);
+        var progress = new TextBlock { Text = item.ProgressText, HorizontalAlignment = HorizontalAlignment.Center, Foreground = item.StatusBrush };
+        Grid.SetColumn(progress, 3);
+        line.Children.Add(progress);
+        row.Children.Add(line);
+        return row;
+    }
+
+    private void BuildSwatches()
+    {
+        _swatches.Children.Clear();
+        var current = ViewSettings.Current.Accent;
+        _swatches.Children.Add(Swatch("system", new Windows.UI.ViewManagement.UISettings().GetColorValue(Windows.UI.ViewManagement.UIColorType.Accent), "Windows accent", "\uE782", current == "system"));
+        foreach (var (name, hex) in Appearance.Presets)
+            _swatches.Children.Add(Swatch(hex, Appearance.TryParse(hex)!.Value, name, null, string.Equals(current, hex, StringComparison.OrdinalIgnoreCase)));
+
+        // Any colour: a picker in a flyout.
+        var isCustom = current != "system" && !Appearance.Presets.Any(p => string.Equals(p.Hex, current, StringComparison.OrdinalIgnoreCase));
+        var picker = new ColorPicker
+        {
+            IsAlphaEnabled = false,
+            IsMoreButtonVisible = false,
+            IsColorSliderVisible = true,
+            IsColorChannelTextInputVisible = false,
+            IsHexInputVisible = true,
+            Color = Appearance.CustomAccent ?? Appearance.TryParse("#0F6CBD")!.Value,
+        };
+        var use = new Button { Content = "Use this colour", HorizontalAlignment = HorizontalAlignment.Right, Style = Res<Style>("AccentButtonStyle") };
+        var flyout = new Flyout { Content = new StackPanel { Spacing = 12, Children = { picker, use } } };
+        use.Click += (_, _) =>
+        {
+            flyout.Hide();
+            ViewSettings.Current.Accent = Appearance.ToHex(picker.Color);
+            BuildSwatches();
+        };
+        var custom = SwatchShell(isCustom && Appearance.CustomAccent is { } c ? new SolidColorBrush(c) : null, "Pick any colour", "\uE710", isCustom);
+        custom.Flyout = flyout;
+        _swatches.Children.Add(custom);
+    }
+
+    private Button Swatch(string value, Windows.UI.Color color, string name, string? glyph, bool selected)
+    {
+        var button = SwatchShell(new SolidColorBrush(color), name, glyph, selected);
+        button.Click += (_, _) =>
+        {
+            ViewSettings.Current.Accent = value;
+            BuildSwatches();
+        };
+        return button;
+    }
+
+    /// <summary>A round colour button; the chosen one has a ring and a check.</summary>
+    private static Button SwatchShell(Brush? fill, string name, string? glyph, bool selected)
+    {
+        var dot = new Border
+        {
+            Width = 28,
+            Height = 28,
+            CornerRadius = new CornerRadius(14),
+            Background = fill,
+            BorderThickness = new Thickness(fill is null ? 1 : 0),
+            Style = fill is null ? ThemedStyles.Get("Border", null, ("BorderBrush", "ControlStrongStrokeColorDefaultBrush")) : null,
+        };
+        if (selected) dot.Child = new FontIcon { Glyph = "\uE73E", FontSize = 13, Foreground = new SolidColorBrush(Colors.White) };
+        else if (glyph is not null)
+        {
+            var icon = new FontIcon { Glyph = glyph, FontSize = 12 };
+            if (fill is not null) icon.Foreground = new SolidColorBrush(Colors.White);
+            dot.Child = icon;
+        }
+        var ring = new Border
+        {
+            Width = 36,
+            Height = 36,
+            CornerRadius = new CornerRadius(18),
+            BorderThickness = new Thickness(selected ? 2 : 0),
+            Style = ThemedStyles.Get("Border", null, ("BorderBrush", "TextFillColorPrimaryBrush")),
+            Child = new Grid { Children = { dot }, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+        };
+        var button = new Button
+        {
+            Content = ring,
+            Padding = new Thickness(0),
+            Background = new SolidColorBrush(Colors.Transparent),
+            BorderThickness = new Thickness(0),
+        };
+        ToolTipService.SetToolTip(button, name);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, name);
+        return button;
+    }
+
+    /// <summary>One tile per row style, each a small live row in that style; the chosen one is outlined.</summary>
+    private void BuildStyleTiles()
+    {
+        _styleTiles.Children.Clear();
+        _styleTiles.ColumnDefinitions.Clear();
+        _styleTiles.RowDefinitions.Clear();
+        const int columns = 3;
+        for (var c = 0; c < columns; c++) _styleTiles.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        for (var r = 0; r < (RowStyles.Length + columns - 1) / columns; r++) _styleTiles.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var i = 0; i < RowStyles.Length; i++)
+        {
+            var (value, label) = RowStyles[i];
+            var selected = ViewSettings.Current.ProgressStyle == value;
+            var sample = new Grid { Height = 30 };
+            sample.Children.Add(FillGrid(Sample(910000 + (ulong)i, "sample.iso", "downloading", 0.62, 100_000_000, 5_000_000), value));
+            sample.Children.Add(new TextBlock { Text = "62%", FontSize = 12, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+            var tile = new Button
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                Padding = new Thickness(10, 10, 10, 8),
+                BorderThickness = new Thickness(selected ? 2 : 1),
+                Content = new StackPanel
+                {
+                    Spacing = 8,
+                    Children = { sample, new TextBlock { Text = label, Style = ThemedStyles.Text(caption: true, secondary: !selected) } },
+                },
+            };
+            if (selected) tile.Style = ThemedStyles.Get("Button", "DefaultButtonStyle", ("BorderBrush", "AccentFillColorDefaultBrush"));
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tile, label);
+            tile.Click += (_, _) =>
+            {
+                ViewSettings.Current.ProgressStyle = value;
+                BuildStyleTiles();
+            };
+            Grid.SetColumn(tile, i % columns);
+            Grid.SetRow(tile, i / columns);
+            _styleTiles.Children.Add(tile);
+        }
+    }
+
+    // ----- load and save -----
 
     private void Load()
     {
@@ -193,22 +547,50 @@ public sealed partial class SettingsPage : UserControl
         _schedule.IsOn = schedule?["enabled"]?.GetValue<bool>() ?? false;
         _start.Time = TimeSpan.TryParse(schedule?["start"]?.GetValue<string>(), out var a) ? a : new TimeSpan(23, 0, 0);
         _stop.Time = TimeSpan.TryParse(schedule?["stop"]?.GetValue<string>(), out var b) ? b : new TimeSpan(7, 0, 0);
-        _whenDone.SelectedIndex = _settings["whenDone"]?.GetValue<string>() switch { "sleep" => 1, "shutdown" => 2, _ => 0 };
+        ShowQueueAction(_settings["whenDone"]?.GetValue<string>() ?? "nothing");
         _updateTools.IsOn = _settings["autoUpdateTools"]?.GetValue<bool>() ?? true;
         _confirm.IsOn = _settings["confirmBrowserDownloads"]?.GetValue<bool>() ?? true;
 
+        _notifications.IsOn = _app.Notifications;
+        _afterOpen.IsOn = _app.AfterOpen;
+        _afterShow.IsOn = _app.AfterShowInFolder;
+        _afterExtract.IsOn = _app.AfterExtract;
+        _afterExtractDelete.IsChecked = _app.AfterExtractDelete;
+        _afterExtractDelete.IsEnabled = _app.AfterExtract;
+        _countdown.SelectedIndex = _app.QueueActionDelay switch { <= 10 => 0, <= 30 => 1, <= 60 => 2, _ => 3 };
+        _once.IsOn = _app.QueueActionOnce;
+
         _progressWindows.IsOn = _app.ShowProgressWindow;
-        _theme.SelectedIndex = ViewSettings.Current.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
-        _density.SelectedIndex = ViewSettings.Current.Density switch { "compact" => 0, "comfortable" => 2, _ => 1 };
+        var view = ViewSettings.Current;
+        _theme.SelectedIndex = view.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
+        _backdrop.SelectedIndex = view.Backdrop switch { "micaAlt" => 1, "acrylic" => 2, "solid" => 3, _ => 0 };
+        _animation.SelectedIndex = view.Animation switch { "off" => 0, "lively" => 2, _ => 1 };
+        _strength.SelectedIndex = view.FillStrength switch { "subtle" => 0, "vivid" => 2, _ => 1 };
+        _colorBy.SelectedIndex = view.ColorBy == "type" ? 1 : 0;
+        _density.SelectedIndex = view.Density switch { "compact" => 0, "comfortable" => 2, _ => 1 };
         _startWithWindows.IsOn = _app.StartWithWindows;
         _closeToTray.IsOn = _app.CloseToTray;
         _clipboard.IsOn = _app.WatchClipboard;
-        _notifications.IsOn = _app.Notifications;
         ShowHostStatus();
-        _toolsStatus.Text = File.Exists(Path.Combine(AppPaths.ToolsDir, "yt-dlp.exe"))
-            ? "yt-dlp, ffmpeg and deno are installed for video downloads."
+        _toolsStatus.Text = File.Exists(Path.Combine(AppPaths.ToolsDir, "yt-dlp", "yt-dlp.exe")) || File.Exists(Path.Combine(AppPaths.ToolsDir, "yt-dlp.exe"))
+            ? "yt-dlp and ffmpeg are installed for video downloads."
             : "yt-dlp is missing, so video pages cannot be downloaded. Run scripts\\fetch-tools.ps1 when building from source.";
     }
+
+    private void ShowQueueAction(string value)
+    {
+        var index = Array.FindIndex(AfterDownload.QueueActions, x => x.Value == value);
+        _whenDone.SelectedIndex = Math.Max(0, index);
+    }
+
+    private void OnQueueActionChanged(string value) => DispatcherQueue.TryEnqueue(() =>
+    {
+        var was = _loading;
+        _loading = true;
+        ShowQueueAction(value);
+        if (_settings is not null) _settings["whenDone"] = value;
+        _loading = was;
+    });
 
     private void Wire()
     {
@@ -226,13 +608,29 @@ public sealed partial class SettingsPage : UserControl
         _updateTools.Toggled += Engine;
         _confirm.Toggled += Engine;
 
-        _theme.SelectionChanged += (_, _) => { if (!_loading) ViewSettings.Current.Theme = _theme.SelectedIndex switch { 1 => "light", 2 => "dark", _ => "system" }; };
-        _density.SelectionChanged += (_, _) => { if (!_loading) ViewSettings.Current.Density = _density.SelectedIndex switch { 0 => "compact", 2 => "comfortable", _ => "standard" }; };
+        _notifications.Toggled += (_, _) => SaveApp(s => s.Notifications = _notifications.IsOn);
+        _afterOpen.Toggled += (_, _) => SaveApp(s => s.AfterOpen = _afterOpen.IsOn);
+        _afterShow.Toggled += (_, _) => SaveApp(s => s.AfterShowInFolder = _afterShow.IsOn);
+        _afterExtract.Toggled += (_, _) =>
+        {
+            _afterExtractDelete.IsEnabled = _afterExtract.IsOn;
+            SaveApp(s => s.AfterExtract = _afterExtract.IsOn);
+        };
+        _afterExtractDelete.Click += (_, _) => SaveApp(s => s.AfterExtractDelete = _afterExtractDelete.IsChecked == true);
+        _countdown.SelectionChanged += (_, _) => SaveApp(s => s.QueueActionDelay = _countdown.SelectedIndex switch { 0 => 10, 2 => 60, 3 => 120, _ => 30 });
+        _once.Toggled += (_, _) => SaveApp(s => s.QueueActionOnce = _once.IsOn);
+
+        var view = ViewSettings.Current;
+        _theme.SelectionChanged += (_, _) => { if (!_loading) view.Theme = _theme.SelectedIndex switch { 1 => "light", 2 => "dark", _ => "system" }; };
+        _backdrop.SelectionChanged += (_, _) => { if (!_loading) view.Backdrop = _backdrop.SelectedIndex switch { 1 => "micaAlt", 2 => "acrylic", 3 => "solid", _ => "mica" }; };
+        _animation.SelectionChanged += (_, _) => { if (!_loading) view.Animation = _animation.SelectedIndex switch { 0 => "off", 2 => "lively", _ => "calm" }; };
+        _strength.SelectionChanged += (_, _) => { if (!_loading) view.FillStrength = _strength.SelectedIndex switch { 0 => "subtle", 2 => "vivid", _ => "normal" }; };
+        _colorBy.SelectionChanged += (_, _) => { if (!_loading) view.ColorBy = _colorBy.SelectedIndex == 1 ? "type" : "status"; };
+        _density.SelectionChanged += (_, _) => { if (!_loading) view.Density = _density.SelectedIndex switch { 0 => "compact", 2 => "comfortable", _ => "standard" }; };
         _progressWindows.Toggled += (_, _) => SaveApp(s => s.ShowProgressWindow = _progressWindows.IsOn);
         _startWithWindows.Toggled += (_, _) => SaveApp(s => s.StartWithWindows = _startWithWindows.IsOn, () => StartupRegistration.Apply(_startWithWindows.IsOn));
         _closeToTray.Toggled += (_, _) => SaveApp(s => s.CloseToTray = _closeToTray.IsOn);
         _clipboard.Toggled += (_, _) => SaveApp(s => s.WatchClipboard = _clipboard.IsOn);
-        _notifications.Toggled += (_, _) => SaveApp(s => s.Notifications = _notifications.IsOn);
     }
 
     private void SaveApp(Action<AppSettings> change, Action? then = null)
@@ -260,6 +658,7 @@ public sealed partial class SettingsPage : UserControl
             ShowError($"\"{folder}\" is not a full folder path, such as C:\\Users\\you\\Downloads. The download folder was not changed.");
             folder = _settings["downloadDir"]?.GetValue<string>() ?? "";
         }
+        var whenDone = AfterDownload.QueueActions[Math.Max(0, _whenDone.SelectedIndex)].Value;
         var settings = new JsonObject(_settings.Select(kv => KeyValuePair.Create(kv.Key, kv.Value?.DeepClone())))
         {
             ["downloadDir"] = folder,
@@ -273,13 +672,15 @@ public sealed partial class SettingsPage : UserControl
                 ["start"] = _start.Time.ToString(@"hh\:mm"),
                 ["stop"] = _stop.Time.ToString(@"hh\:mm"),
             },
-            ["whenDone"] = _whenDone.SelectedIndex switch { 1 => "sleep", 2 => "shutdown", _ => "nothing" },
+            ["whenDone"] = whenDone,
             ["autoUpdateTools"] = _updateTools.IsOn,
             ["confirmBrowserDownloads"] = _confirm.IsOn,
         };
+        var before = _settings["whenDone"]?.GetValue<string>();
         var reply = await _core.CallAsync(new { type = "setSettings", settings });
         if (reply["ok"]?.GetValue<bool>() == true && reply["settings"] is JsonObject saved) _settings = saved;
         else ShowError(reply["error"]?.GetValue<string>() ?? "Could not save the settings.");
+        if (before != whenDone) AfterDownload.RaiseQueueActionChanged(whenDone);
     }
 
     private static bool IsFullPath(string path)
@@ -289,8 +690,8 @@ public sealed partial class SettingsPage : UserControl
     }
 
     private void ShowHostStatus() => _hostStatus.Text = NativeHostRegistration.IsRegistered()
-        ? "Chrome and Edge can reach this app."
-        : "The browser extension cannot reach this app yet. Register it again.";
+        ? "Browsers with the extension can reach this app."
+        : "The extension cannot reach this app yet. Connect again.";
 
     private void ShowError(string message)
     {

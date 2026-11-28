@@ -25,6 +25,14 @@ public static class NativeHostRegistration
         @"Software\Microsoft\Edge\NativeMessagingHosts\" + HostName,
     ];
 
+    // Other Chromium browsers look in their own place (Opera reads Chrome's). Written, not required.
+    private static readonly string[] OtherBrowserKeys =
+    [
+        @"Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\" + HostName,
+        @"Software\Vivaldi\NativeMessagingHosts\" + HostName,
+        @"Software\Chromium\NativeMessagingHosts\" + HostName,
+    ];
+
     public static string ManifestPath => Path.Combine(AppPaths.DataDir, HostName + ".json");
 
     /// <summary>Writes the manifest and the registry keys. Safe to call on every start.</summary>
@@ -40,7 +48,7 @@ public static class NativeHostRegistration
             allowed_origins = AllowedOrigins,
         };
         File.WriteAllText(ManifestPath, JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
-        foreach (var key in BrowserKeys)
+        foreach (var key in BrowserKeys.Concat(OtherBrowserKeys))
         {
             using var k = Registry.CurrentUser.CreateSubKey(key);
             k.SetValue(null, ManifestPath);
@@ -90,8 +98,21 @@ public static class Power
 
     public static void Sleep() => SetSuspendState(false, false, false);
 
-    public static void Shutdown() =>
-        Process.Start(new ProcessStartInfo("shutdown.exe", "/s /t 0") { CreateNoWindow = true, UseShellExecute = false });
+    public static void Hibernate() => SetSuspendState(true, false, false);
+
+    public static void Shutdown() => RunShutdown("/s /t 0");
+
+    public static void Restart() => RunShutdown("/r /t 0");
+
+    public static void SignOut() => RunShutdown("/l");
+
+    public static void Lock() => LockWorkStation();
+
+    private static void RunShutdown(string args) =>
+        Process.Start(new ProcessStartInfo("shutdown.exe", args) { CreateNoWindow = true, UseShellExecute = false });
+
+    [DllImport("user32.dll")]
+    private static extern bool LockWorkStation();
 }
 
 /// <summary>

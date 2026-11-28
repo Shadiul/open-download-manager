@@ -43,6 +43,7 @@ public partial class App : Application
     {
         _ui = DispatcherQueue.GetForCurrentThread();
         ViewSettings.Current.Load(Settings);
+        Appearance.ApplyAccent();
         Notifications.Invoked += a => _ui.TryEnqueue(() => OnNotification(a));
         var profile = AppPaths.Profile;
         if (profile is null) Notifications.Register();
@@ -105,7 +106,24 @@ public partial class App : Application
         else if (!Environment.GetCommandLineArgs().Contains("--background"))
         {
             ShowWindow();
+            // The first start offers the extension to each browser (and a few choices).
+            if (!Settings.WelcomeDone) ShowWelcome();
         }
+        // The extension in the data folder follows the copy shipped with this version of the app.
+        _ = Task.Run(() => { try { BundledExtension.Sync(); } catch (Exception e) { Log.Error("extension sync", e); } });
+    }
+
+    private Views.WelcomeWindow? _welcome;
+
+    public void ShowWelcome()
+    {
+        if (_core is null) return;
+        if (_welcome is null)
+        {
+            _welcome = new Views.WelcomeWindow(_core, Settings);
+            _welcome.Closed += (_, _) => _welcome = null;
+        }
+        _welcome.ShowOnTop();
     }
 
     /// <summary>A second launch handed over to this instance.</summary>
@@ -187,6 +205,12 @@ public partial class App : Application
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Item("Pause all", () => _ = _core?.CallAsync(new { type = "pauseAll" })));
         menu.Items.Add(Item("Resume all", () => _ = _core?.CallAsync(new { type = "resumeAll" })));
+        var whenDone = new MenuFlyoutSubItem { Text = "When downloads finish", Icon = new FontIcon { Glyph = "" } };
+        menu.Items.Add(whenDone);
+        menu.Opening += (_, _) =>
+        {
+            if (_core is not null) AfterDownload.FillMenu(whenDone.Items, _core, AfterDownload.QueueAction(_core));
+        };
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Item("Exit", Quit));
 
@@ -223,17 +247,26 @@ public partial class App : Application
             _ = Task.Run(() => MarkOfTheWeb.Apply(path, url, page));
         }
         if (Settings.Notifications) Notifications.Completed(item.Id, item.DisplayName, item.SaveDir);
+        AfterDownload.OnFileFinished(item, Settings);
     }
 
     private async void OnQueueFinished(string whenDone)
     {
-        if (_window is null || whenDone is not ("sleep" or "shutdown")) return;
+        var action = AfterDownload.QueueActions.FirstOrDefault(a => a.Value == whenDone);
+        if (_window is null || _core is null || action.Value is null or "nothing") return;
         ShowWindow();
-        if (await _window.ConfirmCountdown(whenDone == "sleep" ? "go to sleep" : "shut down", 30))
+        var go = await _window.ConfirmCountdown(action.Countdown, Math.Max(5, Settings.QueueActionDelay));
+        // Armed once: it goes back to "Do nothing" whether it ran or was cancelled.
+        if (Settings.QueueActionOnce) await AfterDownload.SetQueueAction(_core, "nothing");
+        if (!go) return;
+        if (whenDone is "shutdown" or "restart" or "signOut")
         {
-            if (whenDone == "sleep") Power.Sleep();
-            else { _core?.Dispose(); _core = null; Power.Shutdown(); }
+            // Save everything before Windows closes the app.
+            SpeedHistory.Save();
+            _core?.Dispose();
+            _core = null;
         }
+        AfterDownload.Perform(whenDone, Quit);
     }
 
     private void OnNotification(IDictionary<string, string> args)

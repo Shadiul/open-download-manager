@@ -439,7 +439,20 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <!-- What the computer does once every download is done: a quick switch, also in Settings and the tray. -->
+                    <DropDownButton x:Name="WhenDoneButton" Grid.Column="2" Padding="8,2,6,2" MinHeight="0" FontSize="12"
+                                    Background="Transparent" BorderThickness="0" AutomationProperties.Name="When all downloads finish"
+                                    ToolTipService.ToolTip="What happens when all downloads finish">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon x:Name="WhenDoneIcon" Glyph="&#xE7E8;" FontSize="12" />
+                            <TextBlock x:Name="WhenDoneText" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+                        <DropDownButton.Flyout>
+                            <MenuFlyout x:Name="WhenDoneMenu" Placement="TopEdgeAlignedRight" Opening="OnWhenDoneMenuOpening" />
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
                     <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}"
                                TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock x:Name="SelectionText" Grid.Column="1" Style="{StaticResource CaptionTextBlockStyle}"

@@ -21,6 +21,35 @@ public sealed class AppSettings
     public bool ShowTimeLeft { get; set; } = true;
     public bool ShowAdded { get; set; } = true;
     public string SortBy { get; set; } = "queue";
+
+    // Look (see Appearance and RowFill).
+    /// <summary>"system" for the Windows accent, or a colour as #RRGGBB.</summary>
+    public string Accent { get; set; } = "system";
+    /// <summary>mica, micaAlt, acrylic or solid.</summary>
+    public string Backdrop { get; set; } = "mica";
+    /// <summary>dots, solid, glass, stripes, underline or none.</summary>
+    public string ProgressStyle { get; set; } = "dots";
+    /// <summary>off, calm or lively: the band that sweeps along a downloading row.</summary>
+    public string Animation { get; set; } = "calm";
+    /// <summary>subtle, normal or vivid.</summary>
+    public string FillStrength { get; set; } = "normal";
+    /// <summary>status, or type (each kind of file in its own colour).</summary>
+    public string ColorBy { get; set; } = "status";
+
+    // After each download (see AfterDownload).
+    public bool AfterOpen { get; set; }
+    public bool AfterShowInFolder { get; set; }
+    public bool AfterExtract { get; set; }
+    public bool AfterExtractDelete { get; set; }
+
+    // When the whole queue is done: the action itself is an engine setting (whenDone).
+    /// <summary>Seconds to cancel before the computer sleeps, shuts down and so on.</summary>
+    public int QueueActionDelay { get; set; } = 30;
+    /// <summary>Go back to "Do nothing" after the action, so a shutdown is not left armed.</summary>
+    public bool QueueActionOnce { get; set; } = true;
+
+    /// <summary>The welcome window has been seen (it offers to add the extension to each browser).</summary>
+    public bool WelcomeDone { get; set; }
     public bool SortDescending { get; set; }
 
     private static string FilePath => Path.Combine(AppPaths.DataDir, "app-settings.json");

@@ -25,10 +25,35 @@ public static class ThemeColors
         _ => Application.Current.RequestedTheme == ApplicationTheme.Dark,
     };
 
-    public static void RaiseChanged() => Changed?.Invoke();
+    public static void RaiseChanged()
+    {
+        Cache.Clear();
+        Changed?.Invoke();
+    }
 
-    public static Color Accent => IsDark ? Ui.GetColorValue(UIColorType.AccentLight2) : Ui.GetColorValue(UIColorType.AccentDark1);
-    public static Color AccentText => IsDark ? Ui.GetColorValue(UIColorType.AccentLight3) : Ui.GetColorValue(UIColorType.AccentDark2);
+    /// <summary>The accent's shades: the user's pick, or Windows' own.</summary>
+    public static Color AccentShade(UIColorType shade) =>
+        Appearance.CustomAccent is { } c ? Appearance.Shade(c, shade) : Ui.GetColorValue(shade);
+
+    public static Color Accent => IsDark ? AccentShade(UIColorType.AccentLight2) : AccentShade(UIColorType.AccentDark1);
+    public static Color AccentText => IsDark ? AccentShade(UIColorType.AccentLight3) : AccentShade(UIColorType.AccentDark2);
+
+    /// <summary>A colour for each kind of file, for rows coloured by type.</summary>
+    public static Color ForCategory(string category) => (category, IsDark) switch
+    {
+        ("Video", false) => Color.FromArgb(255, 0x88, 0x17, 0x98),
+        ("Video", true) => Color.FromArgb(255, 0xD5, 0x9D, 0xFF),
+        ("Music", false) => Color.FromArgb(255, 0xBF, 0x00, 0x77),
+        ("Music", true) => Color.FromArgb(255, 0xFF, 0x8D, 0xC8),
+        ("Documents", false) => Color.FromArgb(255, 0x0F, 0x6C, 0xBD),
+        ("Documents", true) => Color.FromArgb(255, 0x62, 0xAB, 0xF5),
+        ("Programs", false) => Color.FromArgb(255, 0x03, 0x83, 0x87),
+        ("Programs", true) => Color.FromArgb(255, 0x4C, 0xD5, 0xCC),
+        ("Archives", false) => Color.FromArgb(255, 0xCA, 0x50, 0x10),
+        ("Archives", true) => Color.FromArgb(255, 0xFF, 0xAA, 0x6C),
+        (_, false) => Color.FromArgb(255, 0x60, 0x5E, 0x5C),
+        (_, true) => Color.FromArgb(255, 0xC8, 0xC6, 0xC4),
+    };
     public static Color Critical => IsDark ? Color.FromArgb(255, 0xFF, 0x99, 0xA4) : Color.FromArgb(255, 0xC4, 0x2B, 0x1C);
     public static Color Success => IsDark ? Color.FromArgb(255, 0x6C, 0xCB, 0x5F) : Color.FromArgb(255, 0x0F, 0x7B, 0x0F);
     public static Color Caution => IsDark ? Color.FromArgb(255, 0xFC, 0xE1, 0x00) : Color.FromArgb(255, 0x9D, 0x5D, 0x00);

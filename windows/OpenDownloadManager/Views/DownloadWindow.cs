@@ -85,7 +85,7 @@ public sealed class DownloadWindow : Window
     {
         _core = core;
         _item = item;
-        SystemBackdrop = new MicaBackdrop();
+        SystemBackdrop = Appearance.Backdrop();
 
         // ----- header: route, then "54% complete" with pause and cancel -----
         // Once done, a check badge leads the headline, on the same left edge as everything below.
@@ -229,6 +229,7 @@ public sealed class DownloadWindow : Window
         }
         CenterOnScreen();
         ViewSettings.Current.Track(this);
+        Appearance.Track(this);
 
         _item.PropertyChanged += OnItemChanged;
         _timer = DispatcherQueue.CreateTimer();

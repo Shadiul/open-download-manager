@@ -18,6 +18,10 @@ public static class FileIcons
     {
         if (!string.IsNullOrEmpty(finishedPath) && File.Exists(finishedPath))
         {
+            // Programs carry their own icon; the thumbnail service often gives only the generic one.
+            if (Path.GetExtension(finishedPath).Equals(".exe", StringComparison.OrdinalIgnoreCase)
+                && await FromPngAsync(ShellIconPng(Path.GetFullPath(finishedPath), ofFile: true)) is { } own)
+                return own;
             var thumb = await ThumbnailAsync(finishedPath, ThumbnailMode.SingleItem, size);
             if (thumb is not null) return thumb;
         }
@@ -42,12 +46,13 @@ public static class FileIcons
     /// The type's icon straight from the shell (SHGetFileInfo), which needs no real file and works
     /// for every extension, unlike thumbnails of an empty sample file.
     /// </summary>
-    private static async Task<ImageSource?> LoadTypeIconAsync(string ext, uint size)
+    private static Task<ImageSource?> LoadTypeIconAsync(string ext, uint size) => FromPngAsync(ShellIconPng(ext, ofFile: false));
+
+    private static async Task<ImageSource?> FromPngAsync(byte[]? png)
     {
+        if (png is null) return null;
         try
         {
-            byte[]? png = ShellIconPng(ext);
-            if (png is null) return null;
             var image = new BitmapImage();
             using var stream = new MemoryStream(png).AsRandomAccessStream();
             await image.SetSourceAsync(stream);
@@ -59,13 +64,14 @@ public static class FileIcons
         }
     }
 
-    private static byte[]? ShellIconPng(string ext)
+    /// <summary>A type's icon (<paramref name="ofFile"/> false: pass an extension) or a file's own.</summary>
+    private static byte[]? ShellIconPng(string extOrPath, bool ofFile)
     {
         const uint SHGFI_ICON = 0x100, SHGFI_LARGEICON = 0x0, SHGFI_USEFILEATTRIBUTES = 0x10;
         const uint FILE_ATTRIBUTE_NORMAL = 0x80;
         var info = new SHFILEINFO();
-        var ok = SHGetFileInfo("file" + ext, FILE_ATTRIBUTE_NORMAL, ref info, (uint)System.Runtime.InteropServices.Marshal.SizeOf<SHFILEINFO>(),
-            SHGFI_ICON | SHGFI_LARGEICON | SHGFI_USEFILEATTRIBUTES);
+        var ok = SHGetFileInfo(ofFile ? extOrPath : "file" + extOrPath, FILE_ATTRIBUTE_NORMAL, ref info, (uint)System.Runtime.InteropServices.Marshal.SizeOf<SHFILEINFO>(),
+            SHGFI_ICON | SHGFI_LARGEICON | (ofFile ? 0 : SHGFI_USEFILEATTRIBUTES));
         if (ok == IntPtr.Zero || info.hIcon == IntPtr.Zero) return null;
         try
         {

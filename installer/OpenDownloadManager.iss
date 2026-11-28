@@ -102,6 +102,9 @@ begin
   begin
     RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Google\Chrome\NativeMessagingHosts\{#HostName}');
     RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Microsoft\Edge\NativeMessagingHosts\{#HostName}');
+    RegDeleteKeyIncludingSubkeys(HKCU, 'Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\{#HostName}');
+    RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Vivaldi\NativeMessagingHosts\{#HostName}');
+    RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Chromium\NativeMessagingHosts\{#HostName}');
     RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'OpenDownloadManager');
   end;
 end;

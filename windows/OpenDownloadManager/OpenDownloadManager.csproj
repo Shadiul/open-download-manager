@@ -69,6 +69,19 @@
   <ItemGroup Condition="Exists('$(ToolsDir)ffmpeg.exe')">
     <None Include="$(ToolsDir)*.exe;$(ToolsDir)*.dll;$(ToolsDir)*.txt" Link="tools\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
+  <!-- The browser extension, both builds, ships inside the app (extension\edge, extension\chrome);
+       the app copies it to its data folder and guides adding it to each browser. -->
+  <PropertyGroup>
+    <RepoDir>$(MSBuildThisFileDirectory)..\..\</RepoDir>
+  </PropertyGroup>
+  <Target Name="BuildExtension" BeforeTargets="AssignTargetPaths" Condition="'$(SkipExtensionBuild)' != 'true'">
+    <Exec Command="node scripts/build.mjs" WorkingDirectory="$(RepoDir)" />
+    <ItemGroup>
+      <None Include="$(RepoDir)dist\edge\**\*" Link="extension\edge\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
+      <None Include="$(RepoDir)dist\chrome\**\*" Link="extension\chrome\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup Condition="Exists('$(ToolsDir)yt-dlp\yt-dlp.exe')">
     <None Include="$(ToolsDir)yt-dlp\**\*" Link="tools\yt-dlp\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>

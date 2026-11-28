@@ -52,10 +52,26 @@ have the right to download: it does not get around DRM, paywalls, or logins you 
   M4A, or MP3. Video and audio are merged into one MP4.
 - Streams the browser plays (HLS, DASH, MP4) show up in the extension, each with its own thumbnail.
 
+**After a download**
+
+- Open the file, show it in its folder, or extract ZIP, 7z, RAR and TAR archives into a folder next
+  to them (and send the archive to the Recycle Bin). Programs and scripts are never started by
+  themselves.
+- When everything is done: sleep, hibernate, shut down, restart, sign out, lock, or close the app,
+  after a countdown you can cancel. Set it in Settings, or for just this time from the status bar
+  or the tray menu.
+
+**Make it yours**
+
+- Light and dark themes, Windows' accent or any colour of your own, and Mica, Mica Alt, Acrylic
+  or a solid window.
+- Rows show progress as a dot matrix, a solid or glass fill, stripes, a thin underline, or text
+  only, with a band of light that moves along downloading rows (calm, lively or off). Tint them
+  subtly or vividly, by status or by file type. A live preview shows each change.
+- Three row densities, columns you choose, filters, and search in the title bar (Ctrl+F).
+
 **Made for Windows 11**
 
-- Light and dark themes, Mica, three row densities, columns you choose, filters, and search in the
-  title bar (Ctrl+F).
 - A progress window per download, after the Windows file-copy dialog: a live speed graph and each
   connection's part of the file, then a summary when it is done.
 - A new-download window for browser downloads: the download starts at once while you choose the name
@@ -87,7 +103,13 @@ have the right to download: it does not get around DRM, paywalls, or logins you 
   <img src="docs/screenshots/download-complete.png" alt="The completion screen: size, time taken and average speed" width="380">
 </p>
 <p align="center">
-  <img src="docs/screenshots/settings-dark.png" alt="Settings: download folder, category folders, connections, parallel downloads, speed limit and schedule" width="820">
+  <img src="docs/screenshots/settings-appearance.png" alt="Appearance settings: a live preview of the rows, accent colours, window material and six row progress styles" width="820">
+</p>
+<p align="center">
+  <img src="docs/screenshots/settings-after-download.png" alt="After download settings: open the file, show it, extract archives, and what the computer does when all downloads finish" width="820">
+</p>
+<p align="center">
+  <img src="docs/screenshots/welcome-browsers.png" alt="The welcome screen listing the browsers on the PC, each with a button to add the extension" width="480">
 </p>
 
 ## Browser extension
@@ -125,16 +147,20 @@ You need Windows 10 (version 2004) or later, 64-bit.
 1. From the [latest release](https://github.com/Shadiul/open-download-manager/releases/latest),
    download **OpenDownloadManager-…-setup-x64.exe** and run it. It installs for your user only and
    needs no administrator rights. There is also a portable zip.
-2. Download the extension zip for your browser (**…-extension-edge.zip** or
-   **…-extension-chrome.zip**) and unzip it.
-3. Open `edge://extensions` or `chrome://extensions`, turn on **Developer mode**, choose
-   **Load unpacked**, and pick the unzipped folder.
-4. Start the app once. The extension's popup then says **Connected**.
+2. Start the app. The welcome screen lists the browsers on your PC (Edge, Chrome, Brave, Vivaldi,
+   Opera); choose **Add** next to each one you use. The app opens the browser's extensions page
+   with the extension's folder beside it: turn on **Developer mode** and drag the folder onto the
+   page. The app notices when the extension is in, and the extension updates with the app.
+   You can add it later from **Settings → Browsers**.
+
+The extension also comes as a zip on each release (**…-extension-edge.zip**,
+**…-extension-chrome.zip**) to load by hand with **Load unpacked**.
 
 The installer is not code-signed yet, so Windows SmartScreen may warn about it: choose
 **More info**, then **Run anyway**. Each release lists SHA-256 checksums in `SHA256SUMS.txt`.
 
-Store listings for the extension are planned; until then it is installed as above.
+Browsers only install extensions from outside their stores by hand, which is why adding it takes
+those two steps. Store listings are planned; with them, adding it becomes a single click.
 
 ## Build from source
 
